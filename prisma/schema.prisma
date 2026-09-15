@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SquadType {
+  TANK
+  AIR
+  MISSILE
+}
+
+enum EventType { 
+  DESERT_STORM
+  CANYON_STORM
+}
+
+enum Team {
+  MORNING
+  NIGHT
+}
+
+model Player {
+  id          String    @id @default(cuid())
+  guildId     String
+  discordId   String
+  gameName    String
+  squadType   SquadType
+  power       BigInt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  registrations Registration[]
+
+  @@unique([guildId, discordId])
+  @@index([guildId, gameName])
+}
+
+model EventConfig {
+  id              String    @id @default(cuid())
+  guildId         String
+  eventType       EventType
+  morningCron     String
+  nightCron       String
+  registrationCron String?
+  channelId       String?
+  enabled         Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([guildId, eventType])
+}
+
+model Event {
+  id              String    @id @default(cuid())
+  guildId         String
+  type            EventType
+  team            Team
+  startsAt        DateTime
+  registrationClosesAt DateTime
+  messageId       String?
+  channelId       String?
+  createdAt       DateTime  @default(now())
+  registrations   Registration[]
+
+  @@unique([guildId, type, team, startsAt])
+  @@index([guildId, type, startsAt])
+}
+
+model Registration {
+  id        String   @id @default(cuid())
+  eventId   String
+  playerId  String
+  powerSnapshot BigInt
+  squadSnapshot SquadType
+  registeredAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerId])
+  @@index([playerId])
+}

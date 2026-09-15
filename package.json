@@ -1,0 +1,37 @@
+{
+  "name": "last-war-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "register-commands": "tsx src/register-commands.ts",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "typecheck": "tsc",
+    "commit": "git add . && cz",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.15.0",
+    "cron-parser": "^5.3.1",
+    "discord.js": "^14.22.1",
+    "dotenv": "^17.2.1",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/node-cron": "^3.0.11",
+    "commitizen": "^4.3.2",
+    "cz-conventional-changelog": "^3.3.0",
+    "lint-staged": "^17.5.1",
+    "oxlint": "^1.83.0",
+    "prisma": "^6.15.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

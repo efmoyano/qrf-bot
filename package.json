@@ -12,7 +12,7 @@
     "register-commands": "tsx src/register-commands.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc",
+    "typecheck": "tsc --no-emit",
     "commit": "git add . && cz",
     "prepare": "husky"
   },
@@ -21,13 +21,15 @@
     "cron-parser": "^5.3.1",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.1",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "oxlint-tsgolint": "^7.0.2001"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "@types/node-cron": "^3.0.11",
     "commitizen": "^4.3.2",
     "cz-conventional-changelog": "^3.3.0",
+    "husky": "^9.1.7",
     "lint-staged": "^17.5.1",
     "oxlint": "^1.83.0",
     "prisma": "^6.15.0",

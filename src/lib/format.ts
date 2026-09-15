@@ -1,13 +1,17 @@
 export function parsePower(input: string): bigint {
-  const normalized = input.trim().toUpperCase().replace(/,/g, "");
-  const match = normalized.match(/^([0-9]+(?:\\.[0-9]+)?)\\s*(K|M|B)?$/);
-  if (!match) throw new Error("Invalid power. Examples: 82.4M, 1.2B, 950K");
+  const match = input.replace(',', '.').match(/\d+(?:\.\d+)?/);
 
-  const value = Number(match[1]);
-  const suffix = match[2] ?? "";
-  const multiplier = suffix === "K" ? 1_000n : suffix === "M" ? 1_000_000n : suffix === "B" ? 1_000_000_000n : 1n;
+  if (!match) {
+    throw new Error(`Invalid power value: ${input}`);
+  }
 
-  return BigInt(Math.round(value * Number(multiplier)));
+  const millions = Number(match[0]);
+
+  if (!Number.isFinite(millions) || millions < 0) {
+    throw new Error(`Invalid power value: ${input}`);
+  }
+
+  return BigInt(Math.round(millions * 1_000_000));
 }
 
 export function formatPower(power: bigint): string {

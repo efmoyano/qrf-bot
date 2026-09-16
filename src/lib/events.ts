@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { db } from "./db.js";
 
-const ART_OFFSET_MS = -3 * 60 * 60 * 1000;
+const BASE_OFFSET_MS = -3 * 60 * 60 * 1000;
 
 export interface CreateEventOptions {
   guildId: string;
@@ -35,7 +35,7 @@ export function teamLabel(team: Team): string {
   return team === Team.TEAM_A ? "Team A" : "Team B";
 }
 
-export function getArgentinaDate(d: Date = new Date()): {
+export function getScheduleReferenceDate(d: Date = new Date()): {
   year: number;
   month: number;
   date: number;
@@ -43,18 +43,18 @@ export function getArgentinaDate(d: Date = new Date()): {
   hours: number;
   minutes: number;
 } {
-  const art = new Date(d.getTime() + ART_OFFSET_MS);
+  const ref = new Date(d.getTime() + BASE_OFFSET_MS);
   return {
-    year: art.getUTCFullYear(),
-    month: art.getUTCMonth(),
-    date: art.getUTCDate(),
-    day: art.getUTCDay(),
-    hours: art.getUTCHours(),
-    minutes: art.getUTCMinutes(),
+    year: ref.getUTCFullYear(),
+    month: ref.getUTCMonth(),
+    date: ref.getUTCDate(),
+    day: ref.getUTCDay(),
+    hours: ref.getUTCHours(),
+    minutes: ref.getUTCMinutes(),
   };
 }
 
-export function createArgentinaDate(
+export function createScheduleReferenceDate(
   year: number,
   month: number,
   date: number,
@@ -64,9 +64,9 @@ export function createArgentinaDate(
 }
 
 export function getCurrentCycleAnnouncement(from: Date = new Date()): Date {
-  const art = getArgentinaDate(from);
-  const daysSinceSaturday = (art.day + 1) % 7;
-  return createArgentinaDate(art.year, art.month, art.date - daysSinceSaturday, 23);
+  const ref = getScheduleReferenceDate(from);
+  const daysSinceSaturday = (ref.day + 1) % 7;
+  return createScheduleReferenceDate(ref.year, ref.month, ref.date - daysSinceSaturday, 23);
 }
 
 export function getBattlefieldSchedule(
@@ -81,8 +81,8 @@ export function getBattlefieldSchedule(
       type,
       announcedAt: announcedSaturday,
       registrationClosesAt,
-      teamBStartsAt: new Date(t + 108 * 60 * 60 * 1000), // Thursday 11:00 ART
-      teamAStartsAt: new Date(t + 119 * 60 * 60 * 1000), // Thursday 22:00 ART
+      teamBStartsAt: new Date(t + 108 * 60 * 60 * 1000), // Canyon Storm Team B
+      teamAStartsAt: new Date(t + 119 * 60 * 60 * 1000), // Canyon Storm Team A
     };
   }
 
@@ -90,8 +90,8 @@ export function getBattlefieldSchedule(
     type,
     announcedAt: announcedSaturday,
     registrationClosesAt,
-    teamBStartsAt: new Date(t + 138 * 60 * 60 * 1000), // Friday 17:00 ART
-    teamAStartsAt: new Date(t + 143 * 60 * 60 * 1000), // Friday 22:00 ART
+    teamBStartsAt: new Date(t + 138 * 60 * 60 * 1000), // Desert Storm Team B
+    teamAStartsAt: new Date(t + 143 * 60 * 60 * 1000), // Desert Storm Team A
   };
 }
 

@@ -719,7 +719,7 @@ export const adminCommand: Command = {
             .addStringOption((o) =>
               o
                 .setName("cron")
-                .setDescription("Cron expression (default: Saturday 23:00 ART)")
+                .setDescription("Cron expression for weekly announcement (default: 0 23 * * 6)")
                 .setRequired(false),
             ),
         )

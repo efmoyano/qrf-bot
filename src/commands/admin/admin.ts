@@ -18,10 +18,12 @@ import {
   handleLineupPublish,
   handleLineupSet,
   handleLineupView,
+  handleLineupWizard,
 } from "./lineup-handlers.js";
 import {
   handleAttendanceFinalize,
   handleAttendanceMark,
+  handleAttendanceWizard,
 } from "./attendance-handlers.js";
 import { playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
 import { Command } from "../types.js";
@@ -657,6 +659,7 @@ async function handleLineupGroup(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const sub = interaction.options.getSubcommand();
+  if (sub === "wizard") return handleLineupWizard(interaction);
   if (sub === "auto") return handleLineupAuto(interaction);
   if (sub === "view") return handleLineupView(interaction);
   if (sub === "set") return handleLineupSet(interaction);
@@ -667,6 +670,7 @@ async function handleAttendanceGroup(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const sub = interaction.options.getSubcommand();
+  if (sub === "wizard") return handleAttendanceWizard(interaction);
   if (sub === "mark") return handleAttendanceMark(interaction);
   if (sub === "finalize") return handleAttendanceFinalize(interaction);
 }
@@ -871,6 +875,31 @@ export const adminCommand: Command = {
         .setDescription("Battlefield lineup management (20 Main + 10 Substitutes)")
         .addSubcommand((s) =>
           s
+            .setName("wizard")
+            .setDescription("Interactive UI to select Main starters and Substitutes")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
             .setName("auto")
             .setDescription("Auto-select lineup based on player priority tags & power")
             .addStringOption((o) =>
@@ -988,6 +1017,31 @@ export const adminCommand: Command = {
       g
         .setName("attendance")
         .setDescription("Battlefield attendance tracking & priority updates")
+        .addSubcommand((s) =>
+          s
+            .setName("wizard")
+            .setDescription("Interactive UI to mark attendance and record No-Shows")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
         .addSubcommand((s) =>
           s
             .setName("mark")

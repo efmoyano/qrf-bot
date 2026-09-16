@@ -51,6 +51,7 @@ export const helpCommand: Command = {
         {
           name: "🛡️ Lineup Selection (`/admin lineup`)",
           value: [
+            "`/admin lineup wizard` — Interactive UI with checkboxes to select Main starters & Subs in 1 click",
             "`/admin lineup auto` — Auto-select 20 Main & 10 Subs by priority tags & power",
             "`/admin lineup view` — Inspect the current Main, Substitute, and Standby rosters",
             "`/admin lineup set` — Manually assign/move a player (Main, Substitute, Standby)",
@@ -60,6 +61,7 @@ export const helpCommand: Command = {
         {
           name: "📊 Attendance & Priority (`/admin attendance`)",
           value: [
+            "`/admin attendance wizard` — Interactive UI with checkboxes to easily flag No-Shows & finalize match",
             "`/admin attendance mark` — Record a player as Attended or No-Show (penalizes with Red tag)",
             "`/admin attendance finalize` — Finalize match: awards Blue priority tags to benched players",
           ].join("\n"),

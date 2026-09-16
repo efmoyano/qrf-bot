@@ -1,46 +1,318 @@
-# Last War Discord Bot
+# Last War Discord Bot — Battlefield Coordinator
 
-TypeScript + discord.js + Prisma + PostgreSQL.
+A production-ready Discord bot built with **TypeScript**, **discord.js v14**, **Prisma ORM**, and **PostgreSQL** to manage weekly alliance battlefield events (**Desert Storm** and **Canyon Storm**).
 
-## Requirements
-- Node.js 22+
-- PostgreSQL
-- Discord application/bot token
-- Discord application client ID
+Designed for high usability: players sign up with **1-click interactive buttons**, alliance admins pick starters and substitutes using an interactive **Lineup Wizard**, and match attendance is finalized with a 1-click **Attendance Wizard** that automatically promotes benched players to priority status for the next event.
 
-## Setup
+---
 
-1. Copy `.env.example` to `.env`.
-2. Set `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DATABASE_URL`.
-3. Install:
-   `npm install`
-4. Generate Prisma client:
-   `npm run db:generate`
-5. Create database schema:
-   `npm run db:migrate -- --name init`
-6. Register slash commands:
-   `npm run register-commands`
-7. Run:
-   `npm run dev`
+## 📑 Table of Contents
+1. [Key Features](#-key-features)
+2. [Official Battlefield Schedule](#-official-battlefield-schedule)
+3. [Player Priority Tag System](#-player-priority-tag-system)
+4. [Full End-to-End Execution Flow](#-full-end-to-end-execution-flow)
+5. [Step-by-Step Example Walkthrough](#-step-by-step-example-walkthrough)
+6. [Interactive Wizards Guide](#-interactive-wizards-guide)
+   - [Lineup Selection Wizard](#1-lineup-selection-wizard-admin-lineup-wizard)
+   - [Attendance Tracking Wizard](#2-attendance-wizard-admin-attendance-wizard)
+7. [Complete Command Reference](#-complete-command-reference)
+   - [Member Commands](#member-commands)
+   - [Admin Commands](#admin-commands)
+8. [Installation & Setup](#-installation--setup)
+9. [Testing & Verification Quickstart](#-testing--verification-quickstart)
 
-## Commands
+---
 
-### Players
-- `/profile register name squad power`
-- `/profile update [name] [squad] [power]`
-- `/profile me`
+## 🌟 Key Features
 
-### Storm
-- `/storm register event team`
-- `/storm unregister event team`
-- `/storm list event team`
-- `/storm create event team start close`
+- **1-Click Interactive Registrations**: Announcement embeds include persistent Discord buttons (`[ 🛡️ Team A ]`, `[ ⚔️ Team B ]`, `[ ❌ Unassign ]`, `[ 📋 View Registrations ]`). Members never have to type slash commands to join or switch teams.
+- **Fair Priority Tagging System**: 4-tier tag hierarchy (**Star** > **Blue** > **White** > **Red**) ensures core anchors always play, benched members are guaranteed priority next week, and no-shows are penalized.
+- **Interactive Lineup Wizard (`/admin lineup wizard`)**: Multi-select dropdown with checkboxes to allocate the **20 Main starters** and **10 Substitutes**. Includes a 1-click **`[ ⚡ Auto-Fill ]`** button and **`[ 📢 Publish ]`** to broadcast the lineup embed.
+- **Interactive Attendance Wizard (`/admin attendance wizard`)**: Multi-select dropdown to flag No-Shows after the battle. Finalizing automatically tags absent players as 🔴 **Red**, resets active attendees to ⚪ **White**, and awards 🔵 **Blue Priority** tags to benched members.
+- **Squad & Power Tracking**: Supports flexible power formats (e.g., `80m`, `82.5M`, `90mill`) stored as exact 64-bit integers with zero floating-point imprecision.
+- **Timezone Native**: Automatic cron schedules and event calculations locked to Argentina time (`America/Argentina/Tucuman` - UTC-3).
 
-### Admin
-- `/storm-admin config event morning-cron night-cron channel`
-- `/storm-admin upcoming`
+---
 
-## Important
-The automatic posting scheduler currently creates the next event using a one-hour-ahead placeholder. For production, replace that calculation with the actual event schedule source/configuration. The data model already separates Morning/Night teams and stores exact start/registration-close times.
+## ⏰ Official Battlefield Schedule
 
-Power is stored as an integer number of units, so `82.4M` becomes `82400000` and avoids floating-point errors.
+All times are in **Argentina Time (ART / UTC-3)**:
+
+| Event | Team | Day & Time (ART) | Announcement | Registration Closes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Desert Storm** | **Team A** | Friday 22:00 | Saturday 23:00 | Monday 23:00 (48h after announcement) |
+| **Desert Storm** | **Team B** | Friday 17:00 | Saturday 23:00 | Monday 23:00 (48h after announcement) |
+| **Canyon Storm** | **Team A** | Thursday 22:00 | Saturday 23:00 | Monday 23:00 (48h after announcement) |
+| **Canyon Storm** | **Team B** | Thursday 11:00 | Saturday 23:00 | Monday 23:00 (48h after announcement) |
+
+- **Weekly Announcement Cron**: `0 23 * * 6` (Every Saturday at 23:00 ART)
+- **Registration Duration**: Exactly 2 days (48 hours), automatically closing on Monday at 23:00 ART.
+
+---
+
+## 🏷️ Player Priority Tag System
+
+Every registered player is categorized into one of four priority tiers:
+
+| Tag | Icon | Name | Priority Tier | Description & Behavior |
+| :--- | :---: | :--- | :---: | :--- |
+| **STAR** | ⭐ | Core Member | **1 (Highest)** | Highest power / core anchors of the alliance. Selected first for Main Squad. |
+| **BLUE** | 🔵 | Priority Member | **2** | **Guaranteed priority!** Automatically awarded to players who registered but were benched/standby due to lack of space in the previous match. |
+| **WHITE** | ⚪ | Neutral Member | **3** | Standard active player. Sorted strictly by squad power snapshot. |
+| **RED** | 🔴 | No-Show Penalty | **4 (Lowest)** | Assigned to players who were selected for Main Squad or Subs but failed to attend battle. Given lowest priority in future selection. |
+
+### Sorting & Auto-Fill Rules:
+1. Higher tag tier always wins: `⭐ STAR` > `🔵 BLUE` > `⚪ WHITE` > `🔴 RED`.
+2. Tie-breaker within the same tag: Highest power squad snapshot wins.
+
+---
+
+## 🔄 Full End-to-End Execution Flow
+
+```mermaid
+flowchart TD
+    A[Saturday 23:00 ART] -->|Automated Cron or /admin event announce| B(📢 Discord Announcement Embed Posted)
+    B -->|Buttons: Team A, Team B, Unassign| C[Members Click Buttons to Register]
+    C -->|Monday 23:00 ART| D[🔒 Registration Automatically Closes]
+    D --> E[🛡️ Admin Runs /admin lineup wizard]
+    E -->|Click ⚡ Auto-Fill or Check/Uncheck Dropdown| F[20 Main Starters + 10 Subs Selected]
+    F -->|Click 📢 Publish| G[Official Lineup Embed Broadcast to Channel]
+    G --> H[⚔️ Battle Occurs Thursday / Friday]
+    H --> I[📊 Admin Runs /admin attendance wizard]
+    I -->|Check absent players in Dropdown| J[Click 🏁 Finalize Attendance]
+    J --> K[🔴 Absent Players Tagged RED Penalty]
+    J --> L[⚪ Attendees Reset to Neutral WHITE]
+    J --> M[🔵 Benched Standby Players Awarded BLUE Priority]
+    M -->|Guaranteed Top Priority| A
+```
+
+---
+
+## 📖 Step-by-Step Example Walkthrough
+
+Here is a full real-world walkthrough of how an alliance uses the bot throughout a weekly cycle:
+
+### Phase 1: Initial Bot Setup (One-time)
+1. **Assign Alliance Admin role**:
+   ```
+   /admin role add user:@Commander role:👑 Alliance Admin
+   ```
+2. **Configure automated event channel and schedule**:
+   ```
+   /admin event config event:Desert Storm channel:#desert-storm
+   /admin event config event:Canyon Storm channel:#canyon-storm
+   ```
+
+### Phase 2: Alliance Members Register Profiles
+Members register their profile once. Power inputs support shortcuts like `82.4M` or `80m`:
+```
+/profile register name:ShadowKnight squad:Tank power:85.5m
+/profile register name:Valkyrie squad:Air power:92m
+/profile register name:IronTitan squad:Missile power:78m
+```
+Members can verify their tag and stats anytime with:
+```
+/profile me
+```
+
+### Phase 3: Battlefield Announcement & 1-Click Signup
+On Saturday at 23:00 ART, the scheduler automatically creates the upcoming events and posts an embed in `#desert-storm`. *(Admins can also trigger this manually anytime using `/admin event announce event:Desert Storm`)*.
+
+The message appears in `#desert-storm`:
+```
+📢 Desert Storm — Team A & Team B Registration Open!
+Registration closes: Monday, 23:00 ART (in 2 days)
+⚔️ Team A Battle: Friday 22:00 ART
+🛡️ Team B Battle: Friday 17:00 ART
+
+[ 🛡️ Register Team A ]  [ ⚔️ Register Team B ]  [ ❌ Unassign ]  [ 📋 View Registrations ]
+```
+- Members click **`[ 🛡️ Register Team A ]`** to join Team A.
+- The bot replies with an ephemeral confirmation: `✅ Registered for Desert Storm - Team A!`.
+- If a player changes their mind, clicking **`[ ⚔️ Register Team B ]`** automatically switches their team without errors.
+
+### Phase 4: Lineup Selection (Post-Registration Close)
+Once registration closes on Monday 23:00 ART:
+1. The admin opens the interactive wizard:
+   ```
+   /admin lineup wizard event:Desert Storm team:Team A
+   ```
+2. The wizard UI opens with an ephemeral embed:
+   - Click **`[ ⚡ Auto-Fill ]`**: The bot instantly assigns the top 20 players to **Main Squad** and the next 10 to **Substitutes** using their Priority Tags and Power.
+   - Want to swap a player? Click **`[ 🏆 Edit Main ]`** or **`[ 🔄 Edit Subs ]`** and select/unselect them from the checkbox dropdown.
+3. Click **`[ 📢 Publish ]`**:
+   - The bot immediately broadcasts the official formatted lineup embed into the `#desert-storm` channel, listing all 20 Starters, 10 Substitutes, and Standby members.
+
+### Phase 5: Post-Battle Attendance Finalization
+After the Friday match is completed:
+1. The admin opens the attendance wizard:
+   ```
+   /admin attendance wizard event:Desert Storm team:Team A
+   ```
+2. A multi-select menu appears listing all selected players:
+   - By default, all players are counted as **Attended**.
+   - If player `IronTitan` didn't show up, simply **check `IronTitan` in the dropdown**.
+3. Click **`[ 🏁 Finalize Attendance ]`**:
+   - `IronTitan` is recorded as `NO_SHOW`, gets a 🔴 **Red Priority Tag**, and their no-show counter increases.
+   - All players who attended have their attendance counter incremented, and temporary Blue/Red tags revert to ⚪ **White**.
+   - All registered players who were left in **Standby** (benched because squads were full) automatically receive a 🔵 **Blue Priority Tag**.
+4. In the next week's match, when the admin clicks **`[ ⚡ Auto-Fill ]`**, those 🔵 **Blue Tag** players are picked first before any regular white tag members!
+
+---
+
+## 🧙‍♂️ Interactive Wizards Guide
+
+### 1. Lineup Selection Wizard (`/admin lineup wizard`)
+Eliminates typing commands 30 times.
+
+- **Multi-Select Dropdown**: Lists registered players showing their priority emoji, in-game name, tag name, and squad power.
+- **Check / Uncheck**:
+  - In **Edit Main** mode, checked players become `MAIN` (Starters, max 20).
+  - In **Edit Subs** mode, checked players become `SUBSTITUTE` (Reserves, max 10).
+  - Unchecked players automatically move to `UNSELECTED` (Standby).
+- **`[ 🏆 Edit Main ]`**: Switches dropdown to manage the 20 main starters.
+- **`[ 🔄 Edit Subs ]`**: Switches dropdown to manage the 10 substitutes.
+- **`[ ⚡ Auto-Fill ]`**: 1-click automatic assignment respecting ⭐ > 🔵 > ⚪ > 🔴 and power rankings.
+- **`[ 📢 Publish ]`**: Sends the official roster embed to the public event channel.
+- **Pagination (`[ ◀️ Previous ]` / `[ Next ▶️ ]`)**: Automatically appears if more than 25 members registered.
+
+### 2. Attendance Wizard (`/admin attendance wizard`)
+Fast, error-free post-match reconciliation.
+
+- **Check-Only-Absent UI**: You only check the 1 or 2 players who failed to show up. Everyone else is automatically counted as attended.
+- **`[ 🏁 Finalize Attendance ]`**:
+  - Commits attendance records to database.
+  - Penalizes checked players with 🔴 **Red tags**.
+  - Rewards benched players with 🔵 **Blue tags**.
+  - Posts an audit embed summarizing the final stats.
+- **`[ 🔄 Reset to All Attended ]`**: Clears all checkmarks back to 100% attendance with one click.
+
+---
+
+## ⌨️ Complete Command Reference
+
+### Member Commands
+| Command | Description |
+| :--- | :--- |
+| `/profile register <name> <squad> <power>` | Register your player profile (e.g. `/profile register name:Shadow squad:Tank power:85.5m`). |
+| `/profile update [name] [squad] [power]` | Update your in-game name, squad type (Tank/Air/Missile), or squad power. |
+| `/profile me` | View your profile card, current priority tag, and attendance stats. |
+| `/event register <event> <team>` | Register for Desert Storm or Canyon Storm (Team A / Team B). |
+| `/event unregister <event> <team>` | Remove your registration from an upcoming event. |
+| `/event list <event> <team>` | View registered players ranked by squad power snapshot. |
+| `/help` | Display interactive command guide based on user's permissions. |
+
+### Admin Commands
+
+#### Event Management (`/admin event`)
+| Command | Description |
+| :--- | :--- |
+| `/admin event config <event> <channel> [cron]` | Set event announcement channel and custom cron schedule (default: `0 23 * * 6`). |
+| `/admin event announce <event> [close-in-minutes]` | Post the announcement embed with 1-click registration buttons immediately. |
+| `/admin event upcoming` | List all upcoming scheduled battlefield events and their statuses. |
+| `/admin event create <event> <team> <starts-at> <closes-at>` | Manually create a one-off event with custom dates. |
+
+#### Lineup Selection (`/admin lineup`)
+| Command | Description |
+| :--- | :--- |
+| `/admin lineup wizard <event> <team>` | **(Recommended)** Open the interactive Lineup Wizard UI with checkboxes and auto-fill. |
+| `/admin lineup auto <event> <team>` | Auto-select 20 Main & 10 Subs by priority tags & power without opening UI. |
+| `/admin lineup view <event> <team>` | Preview current Main, Substitute, and Standby rosters. |
+| `/admin lineup set <event> <team> <player> <role>` | Manually set an individual player's role (Main, Substitute, Standby). |
+| `/admin lineup publish <event> <team>` | Broadcast official lineup embed to the event channel. |
+
+#### Attendance & Penalties (`/admin attendance`)
+| Command | Description |
+| :--- | :--- |
+| `/admin attendance wizard <event> <team>` | **(Recommended)** Open the interactive Attendance Wizard UI to flag No-Shows and finalize. |
+| `/admin attendance mark <event> <team> <player> <status>` | Manually mark single player as Attended or No-Show. |
+| `/admin attendance finalize <event> <team>` | Finalize match attendance and grant Blue priority tags to benched players. |
+
+#### Member Roster & Tag Management (`/admin member`)
+| Command | Description |
+| :--- | :--- |
+| `/admin member list [squad] [tag] [sort]` | List all alliance members with filters and sorting. |
+| `/admin member view <player>` | Inspect any member's profile card, priority tag, and attendance history. |
+| `/admin member tag <player> <tag>` | Manually assign priority tier tag (⭐ Star, 🔵 Blue, ⚪ White, 🔴 Red). |
+| `/admin member update <player> [name] [squad] [power]` | Admin override to update any member's stats. |
+| `/admin member delete <player>` | Deactivate a player from the alliance roster. |
+| `/admin member restore <player>` | Restore a previously deactivated player. |
+| `/admin member count` | Show total members and breakdown by squad type. |
+
+#### Role & Permissions (`/admin role`)
+| Command | Description |
+| :--- | :--- |
+| `/admin role add <user> <role>` | Grant `👑 Alliance Admin` or `⚔️ Event Admin` permissions. |
+| `/admin role remove <user> <role>` | Revoke administrative role from a user. |
+| `/admin role list` | List all users holding administrative roles. |
+
+---
+
+## 🚀 Installation & Setup
+
+### Prerequisites
+- **Node.js 22+**
+- **pnpm** (or `npm`)
+- **PostgreSQL database**
+
+### 1. Clone & Install Dependencies
+```bash
+git clone https://github.com/your-repo/desert-storm-discord-bot.git
+cd desert-storm-discord-bot
+pnpm install
+```
+
+### 2. Environment Configuration
+Create a `.env` file in the project root:
+```env
+DISCORD_TOKEN="your_discord_bot_token"
+DISCORD_CLIENT_ID="your_discord_application_client_id"
+DATABASE_URL="postgresql://user:password@localhost:5432/last_war_bot?schema=public"
+```
+
+### 3. Database Migration
+Run the Prisma migrations to initialize the schema:
+```bash
+pnpm run db:migrate
+```
+
+### 4. Register Discord Slash Commands
+Deploy the slash command definitions to Discord:
+```bash
+pnpm run register-commands
+```
+
+### 5. Start the Bot
+```bash
+# Development (with hot-reloading)
+pnpm run dev
+
+# Production build & run
+pnpm run build
+pnpm start
+```
+
+---
+
+## 🧪 Testing & Verification Quickstart
+
+Want to test the full flow in under 2 minutes in your test Discord server?
+
+1. **Trigger an instant test announcement closing in 2 minutes**:
+   ```
+   /admin event announce event:Desert Storm close-in-minutes:2
+   ```
+2. **Click the button in Discord**:
+   Click `[ 🛡️ Register Team A ]` on the message.
+3. **Open the Lineup Wizard**:
+   ```
+   /admin lineup wizard event:Desert Storm team:Team A
+   ```
+   Click `[ ⚡ Auto-Fill ]`, then click `[ 📢 Publish ]`.
+4. **Open the Attendance Wizard**:
+   ```
+   /admin attendance wizard event:Desert Storm team:Team A
+   ```
+   Check any player as absent (or leave empty for 100% attendance), then click `[ 🏁 Finalize Attendance ]`.
+5. **Inspect results**:
+   Run `/profile me` or `/admin member view` to see updated attendance counts and priority tags!

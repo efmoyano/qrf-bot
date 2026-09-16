@@ -1,8 +1,51 @@
-import { AttendanceStatus, EventType, PlayerTag, Team } from "@prisma/client";
+import { AttendanceStatus, EventType, ParticipationRole, PlayerTag, Team } from "@prisma/client";
 import { ChatInputCommandInteraction, EmbedBuilder, MessageFlags } from "discord.js";
 import { db } from "../../lib/db.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
 import { finalizeAttendance, playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
+import { buildAttendanceWizardPayload } from "../../interactions/attendance-wizard.js";
+
+export async function handleAttendanceWizard(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const guildId = interaction.guildId!;
+  const type = interaction.options.getString("event", true) as EventType;
+  const team = interaction.options.getString("team", true) as Team;
+
+  const event = await db.event.findFirst({
+    where: { guildId, type, team },
+    orderBy: { startsAt: "desc" },
+  });
+
+  if (!event) {
+    await interaction.reply({
+      content: `❌ No event found for **${eventLabel(type)} - ${teamLabel(team)}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const selectedCount = await db.registration.count({
+    where: {
+      eventId: event.id,
+      role: { in: [ParticipationRole.MAIN, ParticipationRole.SUBSTITUTE] },
+    },
+  });
+
+  if (selectedCount === 0) {
+    await interaction.reply({
+      content: `❌ No players are assigned to Main Squad or Substitutes for this event. Please configure the lineup first with \`/admin lineup wizard\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const payload = await buildAttendanceWizardPayload(event.id);
+  await interaction.reply({
+    ...payload,
+    flags: MessageFlags.Ephemeral,
+  });
+}
 
 export async function handleAttendanceMark(
   interaction: ChatInputCommandInteraction,

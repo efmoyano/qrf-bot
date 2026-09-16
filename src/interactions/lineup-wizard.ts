@@ -1,0 +1,305 @@
+import { ParticipationRole } from "@prisma/client";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
+  EmbedBuilder,
+  MessageFlags,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
+  StringSelectMenuOptionBuilder,
+} from "discord.js";
+import { db } from "../lib/db.js";
+import { eventLabel, teamLabel } from "../lib/events.js";
+import { formatPower } from "../lib/format.js";
+import {
+  autoSelectLineup,
+  buildLineupEmbed,
+  compareRegistrations,
+  MAX_MAIN_PLAYERS,
+  MAX_SUBSTITUTE_PLAYERS,
+  playerTagIcon,
+  playerTagLabel,
+} from "../lib/lineup.js";
+
+const PAGE_SIZE = 25;
+
+export interface LineupWizardPayload {
+  content?: string;
+  embeds: EmbedBuilder[];
+  components: ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[];
+}
+
+type WizardComponentRow = ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>;
+
+interface LineupPageItem {
+  id: string;
+  playerId: string;
+  role: ParticipationRole;
+  powerSnapshot: bigint;
+  player: {
+    gameName: string;
+    tag: any;
+  };
+}
+
+function buildSelectMenuRow(
+  pageItems: LineupPageItem[],
+  eventId: string,
+  mode: ParticipationRole,
+  safePage: number,
+): WizardComponentRow | null {
+  if (pageItems.length === 0) return null;
+
+  const isMain = mode === ParticipationRole.MAIN;
+  const maxSelectable = isMain ? MAX_MAIN_PLAYERS : MAX_SUBSTITUTE_PLAYERS;
+  const maxVals = Math.min(pageItems.length, maxSelectable);
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`lineup_wiz:select:${eventId}:${mode}:${safePage}`)
+    .setPlaceholder(
+      isMain
+        ? "Check/uncheck players for Main Squad"
+        : "Check/uncheck players for Substitutes",
+    )
+    .setMinValues(0)
+    .setMaxValues(Math.max(1, maxVals));
+
+  for (const item of pageItems) {
+    const option = new StringSelectMenuOptionBuilder()
+      .setLabel(item.player.gameName.slice(0, 100))
+      .setValue(item.playerId)
+      .setDescription(
+        `${playerTagLabel(item.player.tag)} • ${formatPower(item.powerSnapshot)}`.slice(0, 100),
+      )
+      .setEmoji(playerTagIcon(item.player.tag))
+      .setDefault(item.role === mode);
+
+    select.addOptions(option);
+  }
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select) as WizardComponentRow;
+}
+
+function buildActionButtonsRow(
+  eventId: string,
+  mode: ParticipationRole,
+  safePage: number,
+): WizardComponentRow {
+  const isMain = mode === ParticipationRole.MAIN;
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:mode:${eventId}:MAIN:${safePage}`)
+      .setLabel("Edit Main")
+      .setEmoji("🏆")
+      .setStyle(isMain ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:mode:${eventId}:SUBSTITUTE:${safePage}`)
+      .setLabel("Edit Subs")
+      .setEmoji("🔄")
+      .setStyle(!isMain ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:autofill:${eventId}:${mode}:${safePage}`)
+      .setLabel("Auto-Fill")
+      .setEmoji("⚡")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:publish:${eventId}`)
+      .setLabel("Publish")
+      .setEmoji("📢")
+      .setStyle(ButtonStyle.Danger),
+  ) as WizardComponentRow;
+}
+
+function buildNavRow(
+  eventId: string,
+  mode: ParticipationRole,
+  safePage: number,
+  totalPages: number,
+): WizardComponentRow | null {
+  if (totalPages <= 1) return null;
+
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:page:${eventId}:${mode}:${safePage - 1}`)
+      .setLabel("◀️ Previous")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage === 0),
+    new ButtonBuilder()
+      .setCustomId(`lineup_wiz:page:${eventId}:${mode}:${safePage + 1}`)
+      .setLabel("Next ▶️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= totalPages - 1),
+  ) as WizardComponentRow;
+}
+
+export async function buildLineupWizardPayload(
+  eventId: string,
+  mode: ParticipationRole,
+  page = 0,
+): Promise<LineupWizardPayload> {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+  });
+
+  if (!event) {
+    return { content: "❌ Event not found.", components: [], embeds: [] };
+  }
+
+  const registrations = await db.registration.findMany({
+    where: { eventId },
+    include: { player: true },
+  });
+
+  const sorted = [...registrations].sort(compareRegistrations);
+  const mains = sorted.filter((r) => r.role === ParticipationRole.MAIN);
+  const subs = sorted.filter((r) => r.role === ParticipationRole.SUBSTITUTE);
+  const standby = sorted.filter((r) => r.role === ParticipationRole.UNSELECTED);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const safePage = Math.max(0, Math.min(page, totalPages - 1));
+  const pageItems = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const isMain = mode === ParticipationRole.MAIN;
+  const modeTitle = isMain
+    ? `🏆 Editing Main Squad (Current: ${mains.length}/${MAX_MAIN_PLAYERS})`
+    : `🔄 Editing Substitutes (Current: ${subs.length}/${MAX_SUBSTITUTE_PLAYERS})`;
+
+  const embed = new EmbedBuilder()
+    .setColor(isMain ? 0x57f287 : 0x5865f2)
+    .setTitle(`🧙‍♂️ Lineup Wizard: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
+    .setDescription(
+      [
+        `### ${modeTitle}`,
+        `Use the multi-select menu below to check/uncheck players. Checked players are assigned to **${isMain ? "Main Squad" : "Substitutes"}**.`,
+        "",
+        `📊 **Total Registrations:** ${sorted.length} | Page ${safePage + 1}/${totalPages}`,
+        `• 🏆 **Main Squad:** ${mains.length}/${MAX_MAIN_PLAYERS}`,
+        `• 🔄 **Substitutes:** ${subs.length}/${MAX_SUBSTITUTE_PLAYERS}`,
+        `• 🔵 **Standby (Next Priority):** ${standby.length}`,
+      ].join("\n"),
+    )
+    .setFooter({
+      text: "Tip: Click Auto-Fill to populate by priority tags & power with 1 click!",
+    })
+    .setTimestamp();
+
+  const components: WizardComponentRow[] = [];
+  const selectRow = buildSelectMenuRow(pageItems, eventId, mode, safePage);
+  if (selectRow) components.push(selectRow);
+
+  components.push(buildActionButtonsRow(eventId, mode, safePage));
+
+  const navRow = buildNavRow(eventId, mode, safePage, totalPages);
+  if (navRow) components.push(navRow);
+
+  return { embeds: [embed], components };
+}
+
+export async function handleLineupWizardSelect(
+  interaction: StringSelectMenuInteraction,
+): Promise<void> {
+  const [, , eventId, modeStr, pageStr] = interaction.customId.split(":");
+  const mode = modeStr as ParticipationRole;
+  const page = parseInt(pageStr, 10) || 0;
+  const selectedPlayerIds = interaction.values;
+
+  const registrations = await db.registration.findMany({
+    where: { eventId },
+    include: { player: true },
+  });
+
+  const sorted = [...registrations].sort(compareRegistrations);
+  const pageItems = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const updates: Array<Promise<unknown>> = [];
+
+  for (const item of pageItems) {
+    const isSelected = selectedPlayerIds.includes(item.playerId);
+    if (isSelected && item.role !== mode) {
+      updates.push(
+        db.registration.update({
+          where: { id: item.id },
+          data: { role: mode },
+        }),
+      );
+    } else if (!isSelected && item.role === mode) {
+      updates.push(
+        db.registration.update({
+          where: { id: item.id },
+          data: { role: ParticipationRole.UNSELECTED },
+        }),
+      );
+    }
+  }
+
+  await Promise.all(updates);
+
+  const payload = await buildLineupWizardPayload(eventId, mode, page);
+  await interaction.update(payload);
+}
+
+async function handlePublishAction(
+  interaction: ButtonInteraction,
+  eventId: string,
+): Promise<void> {
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event) {
+    await interaction.reply({
+      content: "❌ Event not found.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const cfg = await db.eventConfig.findUnique({
+    where: {
+      guildId_eventType: { guildId: event.guildId, eventType: event.type },
+    },
+  });
+
+  const channelId = event.channelId ?? cfg?.channelId ?? interaction.channelId;
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+
+  if (!channel || !channel.isSendable()) {
+    await interaction.reply({
+      content: `❌ Channel <#${channelId}> not sendable.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const registrations = await db.registration.findMany({
+    where: { eventId },
+    include: { player: true },
+  });
+
+  const embed = buildLineupEmbed(event, registrations);
+  await channel.send({ embeds: [embed] });
+
+  await interaction.reply({
+    content: `✅ Lineup successfully published to <#${channelId}>!`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+export async function handleLineupWizardButton(
+  interaction: ButtonInteraction,
+): Promise<void> {
+  const [, action, eventId, arg1, arg2] = interaction.customId.split(":");
+
+  if (action === "publish") {
+    return handlePublishAction(interaction, eventId);
+  }
+
+  if (action === "autofill") {
+    await autoSelectLineup(eventId);
+  }
+
+  const mode = (arg1 as ParticipationRole) ?? ParticipationRole.MAIN;
+  const page = parseInt(arg2, 10) || 0;
+  const payload = await buildLineupWizardPayload(eventId, mode, page);
+  await interaction.update(payload);
+}

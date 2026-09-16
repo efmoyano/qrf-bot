@@ -1,4 +1,3 @@
-import "dotenv/config";
 import {
   ButtonInteraction,
   ChatInputCommandInteraction,
@@ -6,11 +5,20 @@ import {
   GatewayIntentBits,
   Events,
   MessageFlags,
+  StringSelectMenuInteraction,
 } from "discord.js";
 import { env } from "./lib/config.js";
 import { commandMap } from "./commands/index.js";
 import { initAllSchedulers } from "./lib/scheduler.js";
 import { handleButtonInteraction } from "./interactions/button-handler.js";
+import {
+  handleLineupWizardButton,
+  handleLineupWizardSelect,
+} from "./interactions/lineup-wizard.js";
+import {
+  handleAttendanceWizardButton,
+  handleAttendanceWizardSelect,
+} from "./interactions/attendance-wizard.js";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -19,7 +27,10 @@ client.once(Events.ClientReady, async (c) => {
   await initAllSchedulers(client);
 });
 
-type AppInteraction = ButtonInteraction | ChatInputCommandInteraction;
+type AppInteraction =
+  | ButtonInteraction
+  | ChatInputCommandInteraction
+  | StringSelectMenuInteraction;
 
 async function replyError(i: AppInteraction): Promise<void> {
   if (i.replied || i.deferred) {
@@ -31,7 +42,31 @@ async function replyError(i: AppInteraction): Promise<void> {
 
 async function onButton(i: ButtonInteraction): Promise<void> {
   try {
+    if (i.customId.startsWith("lineup_wiz:")) {
+      await handleLineupWizardButton(i);
+      return;
+    }
+    if (i.customId.startsWith("att_wiz:")) {
+      await handleAttendanceWizardButton(i);
+      return;
+    }
     await handleButtonInteraction(i);
+  } catch (err) {
+    console.error(err);
+    await replyError(i);
+  }
+}
+
+async function onSelectMenu(i: StringSelectMenuInteraction): Promise<void> {
+  try {
+    if (i.customId.startsWith("lineup_wiz:")) {
+      await handleLineupWizardSelect(i);
+      return;
+    }
+    if (i.customId.startsWith("att_wiz:")) {
+      await handleAttendanceWizardSelect(i);
+      return;
+    }
   } catch (err) {
     console.error(err);
     await replyError(i);
@@ -53,6 +88,7 @@ async function onCommand(i: ChatInputCommandInteraction): Promise<void> {
 client.on(Events.InteractionCreate, async (i) => {
   if (!i.guildId) return;
   if (i.isButton()) return onButton(i);
+  if (i.isStringSelectMenu()) return onSelectMenu(i);
   if (i.isChatInputCommand()) return onCommand(i);
 });
 

@@ -3,6 +3,46 @@ import { ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { db } from "../../lib/db.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
 import { autoSelectLineup, buildLineupEmbed, setPlayerRole } from "../../lib/lineup.js";
+import { buildLineupWizardPayload } from "../../interactions/lineup-wizard.js";
+
+export async function handleLineupWizard(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const guildId = interaction.guildId!;
+  const type = interaction.options.getString("event", true) as EventType;
+  const team = interaction.options.getString("team", true) as Team;
+
+  const event = await db.event.findFirst({
+    where: { guildId, type, team, startsAt: { gt: new Date() } },
+    orderBy: { startsAt: "asc" },
+  });
+
+  if (!event) {
+    await interaction.reply({
+      content: `❌ No upcoming event found for **${eventLabel(type)} - ${teamLabel(team)}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const registrationsCount = await db.registration.count({
+    where: { eventId: event.id },
+  });
+
+  if (registrationsCount === 0) {
+    await interaction.reply({
+      content: `ℹ️ No registrations found for **${eventLabel(type)} - ${teamLabel(team)}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const payload = await buildLineupWizardPayload(event.id, ParticipationRole.MAIN);
+  await interaction.reply({
+    ...payload,
+    flags: MessageFlags.Ephemeral,
+  });
+}
 
 export async function handleLineupAuto(
   interaction: ChatInputCommandInteraction,

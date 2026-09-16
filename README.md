@@ -1,5 +1,7 @@
 # Last War Discord Bot — Battlefield Coordinator
 
+> *Made with ❤️ by QRF alliance*
+
 A production-ready Discord bot built with **TypeScript**, **discord.js v14**, **Prisma ORM**, and **PostgreSQL** to manage weekly alliance battlefield events (**Desert Storm** and **Canyon Storm**).
 
 Designed for high usability: players sign up with **1-click interactive buttons**, alliance admins pick starters and substitutes using an interactive **Lineup Wizard**, and match attendance is finalized with a 1-click **Attendance Wizard** that automatically promotes benched players to priority status for the next event.
@@ -245,6 +247,22 @@ Fast, error-free post-match reconciliation.
 | `/admin role add <user> <role>` | Grant `👑 Alliance Admin` or `⚔️ Event Admin` permissions. |
 | `/admin role remove <user> <role>` | Revoke administrative role from a user. |
 | `/admin role list` | List all users holding administrative roles. |
+
+### 🔐 Hiding `/admin` Commands from Regular Members
+
+By default, `/admin` is configured with `.setDefaultMemberPermissions(0)`, which tells Discord that **regular members without permissions cannot see or use `/admin`** in their slash command picker.
+
+To allow members with the `@Alliance Admin` or `@Event Admin` role to see `/admin`:
+1. In Discord, open **Server Settings** ➔ **Integrations**.
+2. Click on **Last War Bot** under *Bots and Apps*.
+3. Scroll down to **Commands** and click on `/admin`.
+4. You will see that `@everyone` is **Disabled (Off)** by default.
+5. Click **Add Roles** ➔ Select **Alliance Admin** and **Event Admin** ➔ Set both to **Allowed (On)**.
+
+> [!NOTE]
+> **Important Discord Behaviors:**
+> - **Server Owner & Administrators:** By Discord API design, the **Server Owner** and members with the Discord `Administrator` permission will **always** see all slash commands, regardless of role overrides. To test visibility from a regular member's perspective, test with a non-owner account or use Discord's *View Server As Role* feature.
+> - **Client Cache:** Discord desktop and mobile apps cache command lists. If you just updated command permissions, restart or reload Discord (`Ctrl + R` on Windows/Linux or `Cmd + R` on Mac).
 
 ---
 

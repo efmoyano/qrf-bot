@@ -94,17 +94,18 @@ export const helpCommand: Command = {
       .setTitle("📖 Last War Bot — Commands Guide")
       .setDescription(
         [
+          "*Made with ❤️ by QRF alliance*",
+          "",
           "Here are all available commands you have permission to use.",
           "",
           "> 💡 **Tip:** When entering power, you can write `80m`, `90mill`, `95.5`, or `82.4M`.",
-          "> 🏷️ **Priority Tags:** ⭐ Star (Core) • 🔵 Blue (Priority) • ⚪ White (Neutral) • 🔴 Red (No-Show)",
         ].join("\n"),
       )
       .addFields(fields)
       .setFooter({
         text: isUserAdmin
-          ? "Viewing all commands (Admin Access) • Last War"
-          : "Viewing member commands • Last War",
+          ? "Viewing all commands (Admin Access) • Made with ❤️ by QRF alliance"
+          : "Viewing member commands • Made with ❤️ by QRF alliance",
       })
       .setTimestamp();
 

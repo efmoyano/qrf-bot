@@ -691,7 +691,7 @@ export const adminCommand: Command = {
   data: new SlashCommandBuilder()
     .setName("admin")
     .setDescription("Alliance and event administration commands")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(0)
     .addSubcommandGroup((g) =>
       g
         .setName("event")

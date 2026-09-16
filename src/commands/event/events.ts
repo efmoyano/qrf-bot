@@ -8,7 +8,6 @@ import {
 import { db } from "../../lib/db.js";
 import { formatPower } from "../../lib/format.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
-import { requireAdmin } from "../../lib/permissions.js";
 import { Command } from "../types.js";
 
 async function handleRegister(
@@ -183,50 +182,6 @@ async function handleList(
   await interaction.reply({ embeds: [embed] });
 }
 
-async function handleCreate(
-  interaction: ChatInputCommandInteraction,
-  type: EventType,
-  team: Team,
-): Promise<void> {
-  if (!(await requireAdmin(interaction))) return;
-
-  const guildId = interaction.guildId!;
-  const startStr = interaction.options.getString("start", true);
-  const closeStr = interaction.options.getString("close", true);
-
-  const start = new Date(startStr);
-  const close = new Date(closeStr);
-
-  if (isNaN(start.getTime()) || isNaN(close.getTime()) || close >= start) {
-    await interaction.reply({
-      content: "❌ Invalid dates. Registration close must be before start time.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const event = await db.event.create({
-    data: {
-      guildId,
-      type,
-      team,
-      startsAt: start,
-      registrationClosesAt: close,
-      channelId: interaction.channelId,
-    },
-  });
-
-  await interaction.reply({
-    content: [
-      `✅ Created **${eventLabel(type)} - ${teamLabel(team)}**`,
-      `Start: <t:${Math.floor(start.getTime() / 1000)}:F>`,
-      `Registration Closes: <t:${Math.floor(close.getTime() / 1000)}:F>`,
-      `Event ID: \`${event.id}\``,
-    ].join("\n"),
-    flags: MessageFlags.Ephemeral,
-  });
-}
-
 export const eventCommand: Command = {
   name: "event",
   category: "Events",
@@ -308,43 +263,6 @@ export const eventCommand: Command = {
               { name: "Team B", value: "TEAM_B" },
             ),
         ),
-    )
-    .addSubcommand((s) =>
-      s
-        .setName("create")
-        .setDescription("Create a Storm event manually (Admin)")
-        .addStringOption((o) =>
-          o
-            .setName("event")
-            .setDescription("Event type")
-            .setRequired(true)
-            .addChoices(
-              { name: "Desert Storm Battlefield", value: "DESERT_STORM" },
-              { name: "Canyon Storm Battlefield", value: "CANYON_STORM" },
-            ),
-        )
-        .addStringOption((o) =>
-          o
-            .setName("team")
-            .setDescription("Team")
-            .setRequired(true)
-            .addChoices(
-              { name: "Team A", value: "TEAM_A" },
-              { name: "Team B", value: "TEAM_B" },
-            ),
-        )
-        .addStringOption((o) =>
-          o
-            .setName("start")
-            .setDescription("ISO start time, e.g. 2026-09-20T20:00:00")
-            .setRequired(true),
-        )
-        .addStringOption((o) =>
-          o
-            .setName("close")
-            .setDescription("ISO registration close time, e.g. 2026-09-20T19:30:00")
-            .setRequired(true),
-        ),
     ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -362,10 +280,6 @@ export const eventCommand: Command = {
     }
     if (sub === "list") {
       await handleList(interaction, type, team);
-      return;
-    }
-    if (sub === "create") {
-      await handleCreate(interaction, type, team);
       return;
     }
   },

@@ -12,7 +12,7 @@
     "register-commands": "tsx src/register-commands.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --no-emit",
+    "typecheck": "tsc --noEmit",
     "commit": "git add . && cz",
     "prepare": "husky"
   },

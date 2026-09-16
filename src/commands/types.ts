@@ -7,7 +7,7 @@ import {
 
 export type CommandCategory =
   | "Player"
-  | "Storm Events"
+  | "Events"
   | "Administration"
   | "General";
 

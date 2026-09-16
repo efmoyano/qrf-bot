@@ -19,8 +19,8 @@ enum EventType {
 }
 
 enum Team {
-  MORNING
-  NIGHT
+  TEAM_A
+  TEAM_B
 }
 
 model Player {
@@ -41,16 +41,14 @@ model Player {
 }
 
 model EventConfig {
-  id              String    @id @default(cuid())
-  guildId         String
-  eventType       EventType
-  morningCron     String
-  nightCron       String
-  registrationCron String?
-  channelId       String?
-  enabled         Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  guildId          String
+  eventType        EventType
+  announcementCron String    @default("0 23 * * 6")
+  channelId        String?
+  enabled          Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([guildId, eventType])
 }

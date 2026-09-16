@@ -10,7 +10,9 @@ import {
 import { db } from "../../lib/db.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
 import { formatPower, parsePower } from "../../lib/format.js";
-import { requireAdmin } from "../../lib/permissions.js";
+import { requireAdmin, requireRoleManager } from "../../lib/permissions.js";
+import { postBattlefieldAnnouncement } from "../../lib/announcement.js";
+import { registerOrUpdateScheduler } from "../../lib/scheduler.js";
 import { Command } from "../types.js";
 
 const ROLE_NAMES = {
@@ -45,31 +47,66 @@ function getRoleName(roleType: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// STORM GROUP HANDLERS
+// EVENT GROUP HANDLERS
 // ---------------------------------------------------------------------------
 
-async function handleStormConfig(
+async function handleEventConfig(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const guildId = interaction.guildId!;
   const type = interaction.options.getString("event", true) as EventType;
-  const morningCron = interaction.options.getString("morning-cron", true);
-  const nightCron = interaction.options.getString("night-cron", true);
   const channel = interaction.options.getChannel("channel", true);
+  const announcementCron = interaction.options.getString("cron") ?? "0 23 * * 6";
 
   await db.eventConfig.upsert({
     where: { guildId_eventType: { guildId, eventType: type } },
-    update: { morningCron, nightCron, channelId: channel.id },
-    create: { guildId, eventType: type, morningCron, nightCron, channelId: channel.id },
+    update: { announcementCron, channelId: channel.id },
+    create: { guildId, eventType: type, announcementCron, channelId: channel.id },
+  });
+
+  registerOrUpdateScheduler(interaction.client, {
+    guildId,
+    eventType: type,
+    announcementCron,
+    channelId: channel.id,
+    enabled: true,
   });
 
   await interaction.reply({
-    content: `✅ Automatic posting configured for **${eventLabel(type)}** in <#${channel.id}>.`,
+    content: `✅ Automatic posting configured for **${eventLabel(type)}** in <#${channel.id}> (Cron: \`${announcementCron}\`).`,
     flags: MessageFlags.Ephemeral,
   });
 }
 
-async function handleStormUpcoming(
+async function handleEventAnnounce(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const guildId = interaction.guildId!;
+  const type = interaction.options.getString("event", true) as EventType;
+  const closeInMinutes =
+    interaction.options.getInteger("close-in-minutes") ?? undefined;
+
+  const cfg = await db.eventConfig.findUnique({
+    where: { guildId_eventType: { guildId, eventType: type } },
+  });
+
+  const channelId = cfg?.channelId ?? interaction.channelId;
+
+  const res = await postBattlefieldAnnouncement({
+    client: interaction.client,
+    guildId,
+    type,
+    channelId,
+    closeInMinutes,
+  });
+
+  await interaction.reply({
+    content: res.success ? `✅ ${res.message}` : `❌ ${res.message}`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+async function handleEventUpcoming(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const guildId = interaction.guildId!;
@@ -81,7 +118,7 @@ async function handleStormUpcoming(
 
   if (!events.length) {
     await interaction.reply({
-      content: "No upcoming storm events found.",
+      content: "No upcoming battlefield events found.",
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -94,14 +131,14 @@ async function handleStormUpcoming(
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle("📅 Upcoming Storm Events")
+    .setTitle("📅 Upcoming Battlefield Events")
     .setDescription(lines.join("\n"))
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
-async function handleStormCreate(
+async function handleEventCreate(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const guildId = interaction.guildId!;
@@ -550,13 +587,14 @@ async function handleRoleList(
 // ROUTERS
 // ---------------------------------------------------------------------------
 
-async function handleStormGroup(
+async function handleEventGroup(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const sub = interaction.options.getSubcommand();
-  if (sub === "config") return handleStormConfig(interaction);
-  if (sub === "upcoming") return handleStormUpcoming(interaction);
-  if (sub === "create") return handleStormCreate(interaction);
+  if (sub === "config") return handleEventConfig(interaction);
+  if (sub === "announce") return handleEventAnnounce(interaction);
+  if (sub === "upcoming") return handleEventUpcoming(interaction);
+  if (sub === "create") return handleEventCreate(interaction);
 }
 
 async function handleMemberGroup(
@@ -583,19 +621,19 @@ async function handleRoleGroup(
 export const adminCommand: Command = {
   name: "admin",
   category: "Administration",
-  description: "Alliance and Storm administration commands",
+  description: "Alliance and event administration commands",
   data: new SlashCommandBuilder()
     .setName("admin")
-    .setDescription("Alliance and Storm administration commands")
+    .setDescription("Alliance and event administration commands")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommandGroup((g) =>
       g
-        .setName("storm")
-        .setDescription("Storm event configuration and manual controls")
+        .setName("event")
+        .setDescription("Battlefield event configuration and manual controls")
         .addSubcommand((s) =>
           s
             .setName("config")
-            .setDescription("Configure automatic Storm posting")
+            .setDescription("Configure automatic event posting")
             .addStringOption((o) =>
               o
                 .setName("event")
@@ -606,32 +644,48 @@ export const adminCommand: Command = {
                   { name: "Canyon Storm", value: "CANYON_STORM" },
                 ),
             )
-            .addStringOption((o) =>
-              o
-                .setName("morning-cron")
-                .setDescription("Cron expression for morning team")
-                .setRequired(true),
-            )
-            .addStringOption((o) =>
-              o
-                .setName("night-cron")
-                .setDescription("Cron expression for night team")
-                .setRequired(true),
-            )
             .addChannelOption((o) =>
               o
                 .setName("channel")
                 .setDescription("Posting channel")
                 .setRequired(true),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("cron")
+                .setDescription("Cron expression (default: Saturday 23:00 ART)")
+                .setRequired(false),
             ),
         )
         .addSubcommand((s) =>
-          s.setName("upcoming").setDescription("Show upcoming scheduled Storm events"),
+          s
+            .setName("announce")
+            .setDescription("Immediately post battlefield announcement for upcoming cycle")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addIntegerOption((o) =>
+              o
+                .setName("close-in-minutes")
+                .setDescription("Optional: minutes until registration closes (e.g. 1 to test)")
+                .setRequired(false)
+                .setMinValue(1),
+            ),
+        )
+        .addSubcommand((s) =>
+          s.setName("upcoming").setDescription("Show upcoming scheduled battlefield events"),
         )
         .addSubcommand((s) =>
           s
             .setName("create")
-            .setDescription("Manually create a Storm event")
+            .setDescription("Manually create a battlefield event")
             .addStringOption((o) =>
               o
                 .setName("event")
@@ -648,8 +702,8 @@ export const adminCommand: Command = {
                 .setDescription("Team")
                 .setRequired(true)
                 .addChoices(
-                  { name: "Morning", value: "MORNING" },
-                  { name: "Night", value: "NIGHT" },
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
                 ),
             )
             .addStringOption((o) =>
@@ -775,19 +829,21 @@ export const adminCommand: Command = {
     ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+    const group = interaction.options.getSubcommandGroup();
+    if (group === "role") {
+      if (!(await requireRoleManager(interaction))) return;
+      await handleRoleGroup(interaction);
+      return;
+    }
+
     if (!(await requireAdmin(interaction))) return;
 
-    const group = interaction.options.getSubcommandGroup();
-    if (group === "storm") {
-      await handleStormGroup(interaction);
+    if (group === "event") {
+      await handleEventGroup(interaction);
       return;
     }
     if (group === "member") {
       await handleMemberGroup(interaction);
-      return;
-    }
-    if (group === "role") {
-      await handleRoleGroup(interaction);
       return;
     }
   },

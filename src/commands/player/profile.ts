@@ -111,7 +111,7 @@ async function registerProfile(
         `${icon} Squad: **${getSquadLabel(player.squadType)}**`,
         `💥 Power: **${formatPower(player.power)}**`,
         "",
-        "Your player profile is ready for Storm registration.",
+        "Your player profile is ready for event registration.",
       ].join("\n"),
     )
     .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))

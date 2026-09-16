@@ -68,7 +68,7 @@ async function handleRegister(
 
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
-    .setTitle("✅ Registered for Storm Event")
+    .setTitle("✅ Registered for Battlefield Event")
     .setDescription(
       [
         `**Event:** ${eventLabel(type)}`,
@@ -227,13 +227,13 @@ async function handleCreate(
   });
 }
 
-export const stormCommand: Command = {
-  name: "storm",
-  category: "Storm Events",
-  description: "Desert and Canyon Storm event commands",
+export const eventCommand: Command = {
+  name: "event",
+  category: "Events",
+  description: "Desert Storm and Canyon Storm event commands",
   data: new SlashCommandBuilder()
-    .setName("storm")
-    .setDescription("Desert and Canyon Storm event commands")
+    .setName("event")
+    .setDescription("Desert Storm and Canyon Storm event commands")
     .addSubcommand((s) =>
       s
         .setName("register")
@@ -254,8 +254,8 @@ export const stormCommand: Command = {
             .setDescription("Team")
             .setRequired(true)
             .addChoices(
-              { name: "Morning", value: "MORNING" },
-              { name: "Night", value: "NIGHT" },
+              { name: "Team A", value: "TEAM_A" },
+              { name: "Team B", value: "TEAM_B" },
             ),
         ),
     )
@@ -279,8 +279,8 @@ export const stormCommand: Command = {
             .setDescription("Team")
             .setRequired(true)
             .addChoices(
-              { name: "Morning", value: "MORNING" },
-              { name: "Night", value: "NIGHT" },
+              { name: "Team A", value: "TEAM_A" },
+              { name: "Team B", value: "TEAM_B" },
             ),
         ),
     )
@@ -304,8 +304,8 @@ export const stormCommand: Command = {
             .setDescription("Team")
             .setRequired(true)
             .addChoices(
-              { name: "Morning", value: "MORNING" },
-              { name: "Night", value: "NIGHT" },
+              { name: "Team A", value: "TEAM_A" },
+              { name: "Team B", value: "TEAM_B" },
             ),
         ),
     )
@@ -329,8 +329,8 @@ export const stormCommand: Command = {
             .setDescription("Team")
             .setRequired(true)
             .addChoices(
-              { name: "Morning", value: "MORNING" },
-              { name: "Night", value: "NIGHT" },
+              { name: "Team A", value: "TEAM_A" },
+              { name: "Team B", value: "TEAM_B" },
             ),
         )
         .addStringOption((o) =>

@@ -23,6 +23,25 @@ enum Team {
   TEAM_B
 }
 
+enum PlayerTag {
+  STAR
+  BLUE
+  WHITE
+  RED
+}
+
+enum ParticipationRole {
+  MAIN
+  SUBSTITUTE
+  UNSELECTED
+}
+
+enum AttendanceStatus {
+  PENDING
+  ATTENDED
+  NO_SHOW
+}
+
 model Player {
   id          String    @id @default(cuid())
   guildId     String
@@ -31,6 +50,9 @@ model Player {
   squadType   SquadType
   power       BigInt
   active      Boolean   @default(true)
+  tag         PlayerTag @default(WHITE)
+  noShowCount Int       @default(0)
+  attendanceCount Int   @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   registrations Registration[]
@@ -38,6 +60,7 @@ model Player {
   @@unique([guildId, discordId])
   @@index([guildId, gameName])
   @@index([guildId, active])
+  @@index([guildId, tag])
 }
 
 model EventConfig {
@@ -70,15 +93,18 @@ model Event {
 }
 
 model Registration {
-  id        String   @id @default(cuid())
-  eventId   String
-  playerId  String
+  id            String            @id @default(cuid())
+  eventId       String
+  playerId      String
   powerSnapshot BigInt
   squadSnapshot SquadType
-  registeredAt DateTime @default(now())
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  role          ParticipationRole @default(UNSELECTED)
+  attendance    AttendanceStatus  @default(PENDING)
+  registeredAt  DateTime          @default(now())
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player        Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, playerId])
   @@index([playerId])
+  @@index([eventId, role])
 }

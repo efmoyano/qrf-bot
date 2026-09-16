@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { db } from "../../lib/db.js";
 import { formatPower, parsePower } from "../../lib/format.js";
+import { playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
 import { Command } from "../types.js";
 
 const SQUAD_ICONS = {
@@ -221,6 +222,8 @@ async function showProfile(
         `👤 Discord: ${interaction.user}`,
         `${icon} Main Squad: **${getSquadLabel(player.squadType)}**`,
         `💪 Power: **${formatPower(player.power)}**`,
+        `🏷️ Priority Tag: **${playerTagIcon(player.tag)} ${playerTagLabel(player.tag)}**`,
+        `📊 Battles Attended: **${player.attendanceCount}** • No-Shows: **${player.noShowCount}**`,
       ].join("\n"),
     )
     .setFooter({ text: "Last War • Player Profile" })

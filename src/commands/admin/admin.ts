@@ -1,4 +1,4 @@
-import { EventType, SquadType, Team } from "@prisma/client";
+import { EventType, PlayerTag, SquadType, Team } from "@prisma/client";
 import {
   ChatInputCommandInteraction,
   EmbedBuilder,
@@ -13,6 +13,17 @@ import { formatPower, parsePower } from "../../lib/format.js";
 import { requireAdmin, requireRoleManager } from "../../lib/permissions.js";
 import { postBattlefieldAnnouncement } from "../../lib/announcement.js";
 import { registerOrUpdateScheduler } from "../../lib/scheduler.js";
+import {
+  handleLineupAuto,
+  handleLineupPublish,
+  handleLineupSet,
+  handleLineupView,
+} from "./lineup-handlers.js";
+import {
+  handleAttendanceFinalize,
+  handleAttendanceMark,
+} from "./attendance-handlers.js";
+import { playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
 import { Command } from "../types.js";
 
 const ROLE_NAMES = {
@@ -249,6 +260,8 @@ async function handleMemberView(
         `👤 Discord: ${user}`,
         `${icon} Squad: **${getSquadLabel(player.squadType)}**`,
         `💥 Power: **${formatPower(player.power)}**`,
+        `🏷️ Priority Tag: **${playerTagIcon(player.tag)} ${playerTagLabel(player.tag)}**`,
+        `📊 Battles Attended: **${player.attendanceCount}** • No-Shows: **${player.noShowCount}**`,
         "",
         `📌 Status: **${player.active ? "Active" : "Inactive"}**`,
       ].join("\n"),
@@ -258,6 +271,36 @@ async function handleMemberView(
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+async function handleMemberTag(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const guildId = interaction.guildId!;
+  const user = interaction.options.getUser("player", true);
+  const tag = interaction.options.getString("tag", true) as PlayerTag;
+
+  const player = await db.player.findUnique({
+    where: { guildId_discordId: { guildId, discordId: user.id } },
+  });
+
+  if (!player) {
+    await interaction.reply({
+      content: `❌ No profile found for ${user}.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await db.player.update({
+    where: { id: player.id },
+    data: { tag },
+  });
+
+  await interaction.reply({
+    content: `✅ Updated **${player.gameName}** (${user}) priority tag to **${playerTagIcon(tag)} ${playerTagLabel(tag)}**.`,
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 async function handleMemberUpdate(
@@ -603,10 +646,29 @@ async function handleMemberGroup(
   const sub = interaction.options.getSubcommand();
   if (sub === "list") return handleMemberList(interaction);
   if (sub === "view") return handleMemberView(interaction);
+  if (sub === "tag") return handleMemberTag(interaction);
   if (sub === "update") return handleMemberUpdate(interaction);
   if (sub === "delete") return handleMemberDelete(interaction);
   if (sub === "restore") return handleMemberRestore(interaction);
   if (sub === "count") return handleMemberCount(interaction);
+}
+
+async function handleLineupGroup(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const sub = interaction.options.getSubcommand();
+  if (sub === "auto") return handleLineupAuto(interaction);
+  if (sub === "view") return handleLineupView(interaction);
+  if (sub === "set") return handleLineupSet(interaction);
+  if (sub === "publish") return handleLineupPublish(interaction);
+}
+
+async function handleAttendanceGroup(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const sub = interaction.options.getSubcommand();
+  if (sub === "mark") return handleAttendanceMark(interaction);
+  if (sub === "finalize") return handleAttendanceFinalize(interaction);
 }
 
 async function handleRoleGroup(
@@ -781,6 +843,213 @@ export const adminCommand: Command = {
         )
         .addSubcommand((s) =>
           s.setName("count").setDescription("Show alliance member statistics"),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("tag")
+            .setDescription("Set a member's priority tier tag")
+            .addUserOption((o) =>
+              o.setName("player").setDescription("Alliance member").setRequired(true),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("tag")
+                .setDescription("Priority tier")
+                .setRequired(true)
+                .addChoices(
+                  { name: "⭐ Star (Core Member)", value: "STAR" },
+                  { name: "🔵 Blue (Priority)", value: "BLUE" },
+                  { name: "⚪ White (Neutral)", value: "WHITE" },
+                  { name: "🔴 Red (No-Show Penalty)", value: "RED" },
+                ),
+            ),
+        ),
+    )
+    .addSubcommandGroup((g) =>
+      g
+        .setName("lineup")
+        .setDescription("Battlefield lineup management (20 Main + 10 Substitutes)")
+        .addSubcommand((s) =>
+          s
+            .setName("auto")
+            .setDescription("Auto-select lineup based on player priority tags & power")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("view")
+            .setDescription("View current lineup breakdown")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("set")
+            .setDescription("Manually assign a player's role in the lineup")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            )
+            .addUserOption((o) =>
+              o.setName("player").setDescription("Registered player").setRequired(true),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("role")
+                .setDescription("Role in lineup")
+                .setRequired(true)
+                .addChoices(
+                  { name: "🏆 Main Squad (Starter)", value: "MAIN" },
+                  { name: "🔄 Substitute (Reserve)", value: "SUBSTITUTE" },
+                  { name: "⏸️ Standby (Unselected)", value: "UNSELECTED" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("publish")
+            .setDescription("Broadcast official lineup embed to event channel")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        ),
+    )
+    .addSubcommandGroup((g) =>
+      g
+        .setName("attendance")
+        .setDescription("Battlefield attendance tracking & priority updates")
+        .addSubcommand((s) =>
+          s
+            .setName("mark")
+            .setDescription("Record a player's attendance or no-show")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            )
+            .addUserOption((o) =>
+              o.setName("player").setDescription("Registered player").setRequired(true),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("status")
+                .setDescription("Attendance status")
+                .setRequired(true)
+                .addChoices(
+                  { name: "✅ Attended & Played", value: "ATTENDED" },
+                  { name: "🔴 No-Show (Missed Battle)", value: "NO_SHOW" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("finalize")
+            .setDescription("Finalize match attendance: sets unselected to Blue & no-shows to Red")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
         ),
     )
     .addSubcommandGroup((g) =>
@@ -844,6 +1113,14 @@ export const adminCommand: Command = {
     }
     if (group === "member") {
       await handleMemberGroup(interaction);
+      return;
+    }
+    if (group === "lineup") {
+      await handleLineupGroup(interaction);
+      return;
+    }
+    if (group === "attendance") {
+      await handleAttendanceGroup(interaction);
       return;
     }
   },

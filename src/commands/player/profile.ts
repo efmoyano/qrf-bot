@@ -1,6 +1,7 @@
 import {
   ChatInputCommandInteraction,
   EmbedBuilder,
+  MessageFlags,
   SlashCommandBuilder,
 } from "discord.js";
 import { db } from "../../lib/db.js";
@@ -69,7 +70,7 @@ async function registerProfile(
       .setFooter({ text: "Last War • Player Profile" })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -84,7 +85,7 @@ async function registerProfile(
     await interaction.reply({
       content:
         "❌ Invalid power. Please enter something like `80m`, `90mill`, `90millones`, or simply `90`.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -117,7 +118,7 @@ async function registerProfile(
     .setFooter({ text: "Last War • Player Profile" })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
 async function updateProfile(
@@ -134,7 +135,7 @@ async function updateProfile(
     await interaction.reply({
       content:
         "❌ You do not have a profile yet. Use `/profile register` first.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -151,7 +152,7 @@ async function updateProfile(
       await interaction.reply({
         content:
           "❌ Invalid power. Please enter something like `80m`, `90mill`, `90millones`, or simply `90`.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -182,7 +183,7 @@ async function updateProfile(
     .setFooter({ text: "Last War • Player Profile" })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
 async function showProfile(
@@ -199,7 +200,7 @@ async function showProfile(
     await interaction.reply({
       content:
         "❌ You do not have a profile yet. Use `/profile register` to create one.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -225,7 +226,7 @@ async function showProfile(
     .setFooter({ text: "Last War • Player Profile" })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
 export const profileCommand: Command = {
@@ -299,7 +300,7 @@ export const profileCommand: Command = {
     if (!interaction.guildId) {
       await interaction.reply({
         content: "❌ This command can only be used inside a server.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }

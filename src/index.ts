@@ -1,6 +1,6 @@
 import "dotenv/config";
 import cron from "node-cron";
-import { Client, GatewayIntentBits, Events } from "discord.js";
+import { Client, GatewayIntentBits, Events, MessageFlags } from "discord.js";
 import { db } from "./lib/db.js";
 import { env } from "./lib/config.js";
 import { commandMap } from "./commands/index.js";
@@ -24,9 +24,9 @@ client.on(Events.InteractionCreate, async (i) => {
   } catch (err) {
     console.error(err);
     if (i.replied || i.deferred) {
-      await i.followUp({ content: "Unexpected error.", ephemeral: true });
+      await i.followUp({ content: "Unexpected error.", flags: MessageFlags.Ephemeral });
     } else {
-      await i.reply({ content: "Unexpected error.", ephemeral: true });
+      await i.reply({ content: "Unexpected error.", flags: MessageFlags.Ephemeral });
     }
   }
 });

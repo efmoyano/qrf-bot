@@ -44,7 +44,7 @@ export const helpCommand: Command = {
           value: [
             "`/admin storm` — Configure auto-announcements, list upcoming, or create events",
             "`/admin member` — List active roster, inspect profiles, update or deactivate members",
-            "`/admin role` — Grant or remove Alliance Admin and Storm Admin roles",
+            "`/admin role` — Grant or remove Alliance Admin and Event Admin roles",
           ].join("\n"),
         },
       )

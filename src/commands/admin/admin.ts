@@ -4,6 +4,7 @@ import {
   EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
+  Role,
   SlashCommandBuilder,
 } from "discord.js";
 import { db } from "../../lib/db.js";
@@ -14,7 +15,7 @@ import { Command } from "../types.js";
 
 const ROLE_NAMES = {
   ALLIANCE_ADMIN: "Alliance Admin",
-  STORM_ADMIN: "Storm Admin",
+  EVENT_ADMIN: "Event Admin",
 } as const;
 
 const SQUAD_ICONS = {
@@ -39,7 +40,7 @@ function getSquadLabel(squad: SquadType): string {
 
 function getRoleName(roleType: string): string | null {
   if (roleType === "ALLIANCE_ADMIN") return ROLE_NAMES.ALLIANCE_ADMIN;
-  if (roleType === "STORM_ADMIN") return ROLE_NAMES.STORM_ADMIN;
+  if (roleType === "EVENT_ADMIN") return ROLE_NAMES.EVENT_ADMIN;
   return null;
 }
 
@@ -400,6 +401,48 @@ async function handleMemberCount(
 // ROLE GROUP HANDLERS
 // ---------------------------------------------------------------------------
 
+async function checkManageRoles(
+  interaction: ChatInputCommandInteraction,
+): Promise<boolean> {
+  const guild = interaction.guild;
+  if (!guild) return false;
+
+  const botMember = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+  const hasManageRoles =
+    interaction.appPermissions?.has(PermissionFlagsBits.ManageRoles) ||
+    botMember?.permissions.has(PermissionFlagsBits.ManageRoles);
+
+  if (!hasManageRoles) {
+    await interaction.reply({
+      content:
+        "❌ I need the **Manage Roles** permission.\n" +
+        "In **Server Settings > Roles**, please enable **Manage Roles** for the bot's role.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return false;
+  }
+  return true;
+}
+
+async function isRoleAboveBot(
+  interaction: ChatInputCommandInteraction,
+  role: Role,
+): Promise<boolean> {
+  const guild = interaction.guild;
+  if (!guild) return true;
+  const botMember = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+  if (botMember && role.position >= botMember.roles.highest.position) {
+    await interaction.reply({
+      content:
+        `❌ I cannot manage **${role.name}** because it is positioned higher than my role.\n` +
+        `In **Server Settings > Roles**, drag the bot's role above **${role.name}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+  return false;
+}
+
 async function handleRoleAdd(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
@@ -415,13 +458,7 @@ async function handleRoleAdd(
     return;
   }
 
-  if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    await interaction.reply({
-      content: "❌ I need Manage Roles permission.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
+  if (!(await checkManageRoles(interaction))) return;
 
   const member = await guild.members.fetch(user.id);
   let role = guild.roles.cache.find((r) => r.name === roleName);
@@ -436,6 +473,8 @@ async function handleRoleAdd(
     });
     return;
   }
+
+  if (await isRoleAboveBot(interaction, role)) return;
 
   await member.roles.add(role);
   await interaction.reply({
@@ -459,6 +498,8 @@ async function handleRoleRemove(
     return;
   }
 
+  if (!(await checkManageRoles(interaction))) return;
+
   const member = await guild.members.fetch(user.id);
   const role = guild.roles.cache.find((r) => r.name === roleName);
 
@@ -469,6 +510,8 @@ async function handleRoleRemove(
     });
     return;
   }
+
+  if (await isRoleAboveBot(interaction, role)) return;
 
   await member.roles.remove(role);
   await interaction.reply({
@@ -704,7 +747,7 @@ export const adminCommand: Command = {
                 .setRequired(true)
                 .addChoices(
                   { name: "👑 Alliance Admin", value: "ALLIANCE_ADMIN" },
-                  { name: "⚔️ Storm Admin", value: "STORM_ADMIN" },
+                  { name: "⚔️ Event Admin", value: "EVENT_ADMIN" },
                 ),
             ),
         )
@@ -722,7 +765,7 @@ export const adminCommand: Command = {
                 .setRequired(true)
                 .addChoices(
                   { name: "👑 Alliance Admin", value: "ALLIANCE_ADMIN" },
-                  { name: "⚔️ Storm Admin", value: "STORM_ADMIN" },
+                  { name: "⚔️ Event Admin", value: "EVENT_ADMIN" },
                 ),
             ),
         )

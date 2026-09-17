@@ -81,6 +81,20 @@ You can trigger an immediate battlefield announcement with an explicit `close-in
      - 🔵 Next Priority Awardees (benched players awarded the **Blue Priority Tag**)
      - 🔴 Absent / No-shows (if any)
    - **Direct Messages**: Each player receives a DM summarizing their attendance status and priority awards for next week!
+   - The confirmation message displays a button: **`[ 🧹 Clean Channel Messages ]`**!
+
+9. **Clean Up Past Bot Messages (Spam-Free Chat)**:
+   - **Method A (1-Click Button)**: Click **`[ 🧹 Clean Channel Messages ]`** directly on the attendance finalized summary.
+     - The bot immediately deletes all earlier event messages from the channel (announcement, registration closed notice, lineup embed, strategy map image) while preserving the final match recap!
+   - **Method B (Slash Command)**: Run `/admin event cleanup`:
+     ```text
+     /admin event cleanup event:Desert Storm keep-recap:true
+     ```
+     - Options:
+       - `channel`: (Optional) specify any channel.
+       - `event`: (Optional) auto-locates the configured event channel.
+       - `keep-recap`: `true` to keep the final match conclusion embed, or `false` to clean everything.
+       - `limit`: (Optional) number of recent messages to scan (default 50, max 100).
 
 ---
 

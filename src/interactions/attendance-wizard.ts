@@ -22,6 +22,7 @@ import {
   buildAttendanceBroadcastEmbed,
   notifyAttendanceFinalized,
 } from "../lib/notifications.js";
+import { cleanBotMessages } from "../lib/cleanup.js";
 
 export interface AttendanceWizardPayload {
   content?: string;
@@ -163,6 +164,99 @@ export async function handleAttendanceWizardSelect(
   await interaction.update(payload);
 }
 
+async function handleCleanupAction(
+  interaction: ButtonInteraction,
+  eventId: string,
+): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  const channelId = event?.channelId ?? interaction.channelId;
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+
+  if (!channel || !channel.isTextBased()) {
+    await interaction.editReply({
+      content: `❌ Could not find or access channel <#${channelId}>.`,
+    });
+    return;
+  }
+
+  const deletedCount = await cleanBotMessages({
+    channel,
+    clientUserId: interaction.client.user.id,
+    limit: 100,
+    keepLatestRecap: true,
+  });
+
+  await interaction.editReply({
+    content: `🧹 Successfully cleaned **${deletedCount}** past bot message(s) from <#${channelId}>. The match conclusion recap was preserved!`,
+  });
+}
+
+async function handleFinalizeAction(
+  interaction: ButtonInteraction,
+  eventId: string,
+): Promise<void> {
+  const event = await db.event.findUnique({ where: { id: eventId } });
+  if (!event) {
+    await interaction.reply({
+      content: "❌ Event not found.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const noShowRegs = await db.registration.findMany({
+    where: { eventId, attendance: AttendanceStatus.NO_SHOW },
+    select: { playerId: true },
+  });
+
+  const noShowPlayerIds = noShowRegs.map((r) => r.playerId);
+  const summary = await finalizeAttendance(eventId, noShowPlayerIds);
+
+  const updatedRegs = await db.registration.findMany({
+    where: { eventId },
+    include: { player: true },
+  });
+
+  const channelId = event.channelId ?? interaction.channelId;
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (channel && channel.isSendable()) {
+    const broadcastEmbed = buildAttendanceBroadcastEmbed(event, updatedRegs);
+    await channel.send({ embeds: [broadcastEmbed] }).catch(console.error);
+  }
+
+  notifyAttendanceFinalized(interaction.client, event, updatedRegs).catch(console.error);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x57f287)
+    .setTitle(`🏁 Attendance Finalized: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
+    .setDescription(
+      [
+        "Attendance records and player priority tags have been updated in the database.",
+        "",
+        "### 📊 Final Summary",
+        `• ✅ **Attended:** ${summary.attendedCount} players (tags kept/reset to White)`,
+        `• 🔴 **No-Shows:** ${summary.noShowCount} players (penalized with Red tag)`,
+        `• 🔵 **Benched / Reserves:** ${summary.benchedCount} players (awarded Blue priority tag for next event!)`,
+        "",
+        `📢 *Public recap broadcast to <#${channelId}> and individual DMs dispatched to players.*`,
+      ].join("\n"),
+    )
+    .setFooter({ text: "Last War Battlefield Attendance" })
+    .setTimestamp();
+
+  const cleanupRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`att_wiz:cleanup:${eventId}`)
+      .setLabel("Clean Channel Messages")
+      .setEmoji("🧹")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  await interaction.update({ embeds: [embed], components: [cleanupRow] });
+}
+
 export async function handleAttendanceWizardButton(
   interaction: ButtonInteraction,
 ): Promise<void> {
@@ -182,56 +276,11 @@ export async function handleAttendanceWizardButton(
     return;
   }
 
+  if (action === "cleanup") {
+    return handleCleanupAction(interaction, eventId);
+  }
+
   if (action === "finalize") {
-    const event = await db.event.findUnique({ where: { id: eventId } });
-    if (!event) {
-      await interaction.reply({
-        content: "❌ Event not found.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const noShowRegs = await db.registration.findMany({
-      where: { eventId, attendance: AttendanceStatus.NO_SHOW },
-      select: { playerId: true },
-    });
-
-    const noShowPlayerIds = noShowRegs.map((r) => r.playerId);
-    const summary = await finalizeAttendance(eventId, noShowPlayerIds);
-
-    const updatedRegs = await db.registration.findMany({
-      where: { eventId },
-      include: { player: true },
-    });
-
-    const channelId = event.channelId ?? interaction.channelId;
-    const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-    if (channel && channel.isSendable()) {
-      const broadcastEmbed = buildAttendanceBroadcastEmbed(event, updatedRegs);
-      await channel.send({ embeds: [broadcastEmbed] }).catch(console.error);
-    }
-
-    notifyAttendanceFinalized(interaction.client, event, updatedRegs).catch(console.error);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x57f287)
-      .setTitle(`🏁 Attendance Finalized: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
-      .setDescription(
-        [
-          "Attendance records and player priority tags have been updated in the database.",
-          "",
-          "### 📊 Final Summary",
-          `• ✅ **Attended:** ${summary.attendedCount} players (tags kept/reset to White)`,
-          `• 🔴 **No-Shows:** ${summary.noShowCount} players (penalized with Red tag)`,
-          `• 🔵 **Benched / Reserves:** ${summary.benchedCount} players (awarded Blue priority tag for next event!)`,
-          "",
-          `📢 *Public recap broadcast to <#${channelId}> and individual DMs dispatched to players.*`,
-        ].join("\n"),
-      )
-      .setFooter({ text: "Last War Battlefield Attendance" })
-      .setTimestamp();
-
-    await interaction.update({ embeds: [embed], components: [] });
+    return handleFinalizeAction(interaction, eventId);
   }
 }

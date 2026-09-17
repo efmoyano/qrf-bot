@@ -32,6 +32,7 @@ import {
   handleStrategyWizard,
 } from "./strategy-handlers.js";
 import { playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
+import { cleanBotMessages } from "../../lib/cleanup.js";
 import { Command } from "../types.js";
 
 const ROLE_NAMES = {
@@ -251,8 +252,53 @@ async function handleEventSchedule(interaction: ChatInputCommandInteraction): Pr
   await interaction.reply({ content: "Event schedule updated successfully.", flags: MessageFlags.Ephemeral });
 }
 
+async function resolveCleanupChannel(
+  interaction: ChatInputCommandInteraction,
+  guildId: string,
+): Promise<string> {
+  const channelOption = interaction.options.getChannel("channel");
+  const eventType = interaction.options.getString("event") as EventType | null;
 
+  if (channelOption?.id) return channelOption.id;
+  if (eventType) {
+    const cfg = await db.eventConfig.findUnique({
+      where: { guildId_eventType: { guildId, eventType } },
+    });
+    if (cfg?.channelId) return cfg.channelId;
+  }
+  return interaction.channelId;
+}
 
+async function handleEventCleanup(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const guildId = interaction.guildId!;
+  const keepRecap = interaction.options.getBoolean("keep-recap") ?? false;
+  const limit = interaction.options.getInteger("limit") ?? 50;
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const targetChannelId = await resolveCleanupChannel(interaction, guildId);
+  const channel = await interaction.client.channels.fetch(targetChannelId).catch(() => null);
+
+  if (!channel || !channel.isTextBased()) {
+    await interaction.editReply({
+      content: `❌ Could not find or access text channel <#${targetChannelId}>.`,
+    });
+    return;
+  }
+
+  const deletedCount = await cleanBotMessages({
+    channel,
+    clientUserId: interaction.client.user.id,
+    limit,
+    keepLatestRecap: keepRecap,
+  });
+
+  await interaction.editReply({
+    content: `🧹 Cleaned **${deletedCount}** bot message(s) from <#${targetChannelId}>.${keepRecap ? " (Preserved latest match recap embed)" : ""}`,
+  });
+}
 
 async function handleMemberList(
   interaction: ChatInputCommandInteraction,
@@ -697,6 +743,7 @@ async function handleEventGroup(
   if (sub === "announce") return handleEventAnnounce(interaction);
   if (sub === "upcoming") return handleEventUpcoming(interaction);
   if (sub === "schedule") return handleEventSchedule(interaction);
+  if (sub === "cleanup") return handleEventCleanup(interaction);
 }
 
 async function handleMemberGroup(
@@ -882,6 +929,41 @@ export const adminCommand: Command = {
                 .setName("close")
                 .setDescription("ISO registration close time, e.g. 2026-09-20T19:30:00")
                 .setRequired(true),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("cleanup")
+            .setDescription("Delete bot messages from the channel to keep chat spam-free")
+            .addChannelOption((o) =>
+              o
+                .setName("channel")
+                .setDescription("Target channel (defaults to event channel or current channel)")
+                .setRequired(false),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type to find configured channel")
+                .setRequired(false)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                  { name: "Canyon Storm", value: "CANYON_STORM" },
+                ),
+            )
+            .addBooleanOption((o) =>
+              o
+                .setName("keep-recap")
+                .setDescription("Preserve the latest match conclusion recap embed? (default: false)")
+                .setRequired(false),
+            )
+            .addIntegerOption((o) =>
+              o
+                .setName("limit")
+                .setDescription("Number of messages to inspect (1-100, default: 50)")
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(100),
             ),
         ),
     )

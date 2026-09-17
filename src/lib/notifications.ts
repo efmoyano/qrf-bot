@@ -7,6 +7,18 @@ import {
 } from "@prisma/client";
 import { Client, EmbedBuilder } from "discord.js";
 import { eventLabel, teamLabel } from "./events.js";
+import {
+  getAttendanceNotice,
+  getLineupMainDM,
+  getLineupStandbyDM,
+  getLineupSubDM,
+  getLocalizedBuildingName,
+  getLocalizedSquadName,
+  getStrategyObjectiveDM,
+  getStrategyReserveDM,
+  LocalizedLineupNotice,
+  SupportedLanguage,
+} from "./i18n.js";
 
 export type RegistrationWithPlayer = Registration & { player: Player };
 
@@ -39,29 +51,30 @@ export async function notifyLineupPublished(
   const matchTimestamp = Math.floor(event.startsAt.getTime() / 1000);
 
   const notifications = registrations.map(async (r) => {
-    let title = "";
-    let description = "";
+    const lang = (r.player.language as SupportedLanguage) || "en";
+    const localizedSquad = r.player.squadType
+      ? getLocalizedSquadName(r.player.squadType, lang)
+      : "General";
+
+    let notice: LocalizedLineupNotice;
     let color = 0x5865f2;
 
     if (r.role === ParticipationRole.MAIN) {
-      title = `🏆 Main Squad Selected: ${eventTitle}`;
-      description = `Congratulations! You have been selected for the **Main Squad** in **${eventTitle}**.\n\n📅 **Match Starts:** <t:${matchTimestamp}:F> (<t:${matchTimestamp}:R>)\n⚔️ **Squad:** ${r.player.squadType ?? "General"}\n\nPlease ensure you are online in game at least 5 minutes before match start!`;
+      notice = getLineupMainDM(lang, eventTitle, matchTimestamp, localizedSquad);
       color = 0x57f287;
     } else if (r.role === ParticipationRole.SUBSTITUTE) {
-      title = `🔄 Substitute Selected: ${eventTitle}`;
-      description = `You have been selected as a **Substitute** for **${eventTitle}**.\n\n📅 **Match Starts:** <t:${matchTimestamp}:F> (<t:${matchTimestamp}:R>)\n⚔️ **Squad:** ${r.player.squadType ?? "General"}\n\nPlease be on standby during match start in case a starter is unable to play.`;
+      notice = getLineupSubDM(lang, eventTitle, matchTimestamp, localizedSquad);
       color = 0xfee75c;
     } else {
-      title = `⏳ Standby Roster: ${eventTitle}`;
-      description = `Thank you for registering for **${eventTitle}**! You are currently on **Standby** for this match.\n\nIf you are not substituted into the match, you will receive a 🔵 **Blue Priority Tag** granting you guaranteed selection priority for next week!`;
+      notice = getLineupStandbyDM(lang, eventTitle);
       color = 0x5865f2;
     }
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(title)
-      .setDescription(description)
-      .setFooter({ text: "Desert Storm Battlefield Coordinator" })
+      .setTitle(notice.title)
+      .setDescription(notice.description)
+      .setFooter({ text: notice.footer })
       .setTimestamp();
 
     return sendDirectMessage(client, r.player.discordId, { embeds: [embed] });
@@ -78,32 +91,29 @@ export async function notifyAttendanceFinalized(
   const eventTitle = `${eventLabel(event.type)} (${teamLabel(event.team)})`;
 
   const notifications = registrations.map(async (r) => {
-    let title = "";
-    let description = "";
+    const lang = (r.player.language as SupportedLanguage) || "en";
+    let notice: LocalizedLineupNotice;
     let color = 0x5865f2;
 
     if (r.attendance === AttendanceStatus.NO_SHOW) {
-      title = `⚠️ Match Attendance: Marked Absent (${eventTitle})`;
-      description = `You were marked as **Absent / No-Show** for **${eventTitle}**.\n\n🔴 A **Red Tag** penalty has been applied to your alliance profile. If you have an excuse, please contact your alliance officers.`;
+      notice = getAttendanceNotice(lang, eventTitle, "NO_SHOW");
       color = 0xed4245;
     } else if (
       r.role === ParticipationRole.MAIN ||
       r.role === ParticipationRole.SUBSTITUTE
     ) {
-      title = `✅ Match Attendance Recorded: ${eventTitle}`;
-      description = `Thank you for participating in **${eventTitle}**!\n\nYour match attendance count has been updated in the alliance records.`;
+      notice = getAttendanceNotice(lang, eventTitle, "ATTENDED");
       color = 0x57f287;
     } else {
-      title = `🔵 Priority Tag Awarded for Next Event!`;
-      description = `Thank you for registering for **${eventTitle}**.\n\nSince you were benched / on standby for this match, you have been awarded the 🔵 **Blue Priority Tag**! This gives you guaranteed priority selection for the next battlefield event.`;
+      notice = getAttendanceNotice(lang, eventTitle, "BLUE_TAG");
       color = 0x3498db;
     }
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(title)
-      .setDescription(description)
-      .setFooter({ text: "Desert Storm Battlefield Coordinator" })
+      .setTitle(notice.title)
+      .setDescription(notice.description)
+      .setFooter({ text: notice.footer })
       .setTimestamp();
 
     return sendDirectMessage(client, r.player.discordId, { embeds: [embed] });
@@ -182,18 +192,29 @@ export async function notifyStrategyPublished(
   const matchTimestamp = Math.floor(event.startsAt.getTime() / 1000);
 
   const notifications = registrations.map(async (r) => {
-    let title = "";
-    let description = "";
+    const lang = (r.player.language as SupportedLanguage) || "en";
+    const localizedSquad = r.player.squadType
+      ? getLocalizedSquadName(r.player.squadType, lang)
+      : "General";
+
+    let notice: LocalizedLineupNotice;
     let color = 0x5865f2;
 
     if (r.role === ParticipationRole.MAIN && r.assignedBuilding) {
-      const bName = buildingMap[r.assignedBuilding] ?? r.assignedBuilding;
-      title = `🗺️ Tactical Objective Assigned: ${eventTitle}`;
-      description = `Your tactical combat assignment for **${eventTitle}** is ready!\n\n🎯 **Assigned Structure:** **${bName}**\n⚔️ **Squad:** ${r.player.squadType}\n📅 **Match Starts:** <t:${matchTimestamp}:F> (<t:${matchTimestamp}:R>)\n\nPlease review the tactical battlefield map in the team channel and coordinate with your squad mates!`;
+      const rawBuildingName = buildingMap[r.assignedBuilding] ?? r.assignedBuilding;
+      const buildingName =
+        getLocalizedBuildingName(r.assignedBuilding, lang) || rawBuildingName;
+
+      notice = getStrategyObjectiveDM({
+        lang,
+        eventTitle,
+        buildingName,
+        squad: localizedSquad,
+        timestamp: matchTimestamp,
+      });
       color = 0xf97316;
     } else if (r.role === ParticipationRole.SUBSTITUTE) {
-      title = `🔄 Reserve Duty: ${eventTitle}`;
-      description = `The tactical strategy map for **${eventTitle}** has been published!\n\nYou are assigned as **Substitute / Reserve**. Please be online and prepared to step in for any structure defense if required.`;
+      notice = getStrategyReserveDM(lang, eventTitle);
       color = 0xfee75c;
     } else {
       return;
@@ -201,9 +222,9 @@ export async function notifyStrategyPublished(
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(title)
-      .setDescription(description)
-      .setFooter({ text: "Desert Storm Tactical Command" })
+      .setTitle(notice.title)
+      .setDescription(notice.description)
+      .setFooter({ text: notice.footer })
       .setTimestamp();
 
     return sendDirectMessage(client, r.player.discordId, { embeds: [embed] });

@@ -51,6 +51,7 @@ model Player {
   power       BigInt
   active      Boolean   @default(true)
   tag         PlayerTag @default(WHITE)
+  language    String    @default("en")
   noShowCount Int       @default(0)
   attendanceCount Int   @default(0)
   createdAt   DateTime  @default(now())

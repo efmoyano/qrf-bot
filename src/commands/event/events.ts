@@ -189,10 +189,30 @@ export const eventCommand: Command = {
   data: new SlashCommandBuilder()
     .setName("event")
     .setDescription("Desert Storm and Canyon Storm event commands")
+    .setDescriptionLocalizations({
+      "es-ES": "Comandos de eventos de Tormenta del Desierto y Cañón",
+      "es-419": "Comandos de eventos de Tormenta del Desierto y Cañón",
+      "pt-BR": "Comandos de eventos Tempestade do Deserto e Canyon",
+      fr: "Commandes pour Tempête du Désert et Tempête du Canyon",
+      de: "Befehle für Desert Storm und Canyon Storm Events",
+      ru: "Команды событий Буря в Пустыне и Каньон",
+      ko: "사막의 폭풍 및 협곡 폭풍 전장 이벤트 명령어",
+      ja: "砂漠の嵐およびキャニオン戦場イベントコマンド",
+    })
     .addSubcommand((s) =>
       s
         .setName("register")
         .setDescription("Register for a Storm event")
+        .setDescriptionLocalizations({
+          "es-ES": "Inscribirse en un evento de Tormenta",
+          "es-419": "Inscribirse en un evento de Tormenta",
+          "pt-BR": "Inscrever-se em um evento Tempestade",
+          fr: "S'inscrire à un événement de Tempête",
+          de: "Für ein Storm-Event anmelden",
+          ru: "Зарегистрироваться на событие Бури",
+          ko: "전장 이벤트 참가 신청",
+          ja: "戦場イベントへの参加登録",
+        })
         .addStringOption((o) =>
           o
             .setName("event")
@@ -218,6 +238,16 @@ export const eventCommand: Command = {
       s
         .setName("unregister")
         .setDescription("Remove yourself from an event")
+        .setDescriptionLocalizations({
+          "es-ES": "Cancelar tu inscripción en un evento",
+          "es-419": "Cancelar tu inscripción en un evento",
+          "pt-BR": "Cancelar sua inscrição em um evento",
+          fr: "Annuler votre inscription à un événement",
+          de: "Anmeldung für ein Event zurückziehen",
+          ru: "Отменить свою регистрацию на событие",
+          ko: "이벤트 참가 신청 취소",
+          ja: "イベント参加登録の取り消し",
+        })
         .addStringOption((o) =>
           o
             .setName("event")
@@ -243,6 +273,16 @@ export const eventCommand: Command = {
       s
         .setName("list")
         .setDescription("List registered players for an event")
+        .setDescriptionLocalizations({
+          "es-ES": "Lista de jugadores inscritos para un evento",
+          "es-419": "Lista de jugadores inscritos para un evento",
+          "pt-BR": "Listar jogadores inscritos para um evento",
+          fr: "Liste des joueurs inscrits à un événement",
+          de: "Angemeldete Spieler für ein Event auflisten",
+          ru: "Список зарегистрированных игроков на событие",
+          ko: "이벤트 참가 신청자 명단 조회",
+          ja: "イベント参加登録メンバー一覧を表示",
+        })
         .addStringOption((o) =>
           o
             .setName("event")

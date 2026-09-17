@@ -238,55 +238,51 @@ export async function getEventStrategyData(eventId: string): Promise<{
   return { assignments, substitutes, unassignedStarters };
 }
 
-// Recommended target capacity per structure (sum = 20 starters)
-const BUILDING_CAPACITIES: Record<string, number> = {
-  NUCLEAR_SILO: 4,
-  ARSENAL: 3,
-  MERCENARY_FACTORY: 2,
-  INFO_CENTER: 1,
-  OIL_REFINERY_1: 2,
-  OIL_REFINERY_2: 2,
-  SCIENCE_HUB: 2,
-  HOSPITAL_1: 1,
-  HOSPITAL_2: 1,
-  HOSPITAL_3: 1,
-  HOSPITAL_4: 1,
+// Recommended mixed squad compositions per structure (sum = 20 starters)
+const BUILDING_SQUAD_PREFERENCES: Record<string, SquadType[]> = {
+  NUCLEAR_SILO: [SquadType.TANK, SquadType.TANK, SquadType.MISSILE, SquadType.AIR],
+  ARSENAL: [SquadType.MISSILE, SquadType.AIR, SquadType.TANK],
+  OIL_REFINERY_1: [SquadType.TANK, SquadType.MISSILE],
+  OIL_REFINERY_2: [SquadType.TANK, SquadType.AIR],
+  MERCENARY_FACTORY: [SquadType.MISSILE, SquadType.TANK],
+  INFO_CENTER: [SquadType.AIR],
+  SCIENCE_HUB: [SquadType.AIR, SquadType.TANK],
+  HOSPITAL_1: [SquadType.TANK],
+  HOSPITAL_2: [SquadType.AIR],
+  HOSPITAL_3: [SquadType.MISSILE],
+  HOSPITAL_4: [SquadType.AIR],
 };
 
-const OTHER_BUILDINGS = [
-  "MERCENARY_FACTORY",
+const BUILDING_ORDER = [
+  "NUCLEAR_SILO",
+  "ARSENAL",
   "OIL_REFINERY_1",
   "OIL_REFINERY_2",
-  "SCIENCE_HUB",
+  "MERCENARY_FACTORY",
   "INFO_CENTER",
+  "SCIENCE_HUB",
   "HOSPITAL_1",
   "HOSPITAL_2",
   "HOSPITAL_3",
   "HOSPITAL_4",
 ];
 
-function extractTopPicks(
+function extractMixedPicks(
   list: RegWithPlayer[],
-  targetCount: number,
-  preferSquad?: SquadType,
+  preferredSquads: SquadType[],
 ): RegWithPlayer[] {
   const picks: RegWithPlayer[] = [];
-  if (!preferSquad) {
-    while (picks.length < targetCount && list.length > 0) {
+
+  for (const squad of preferredSquads) {
+    if (list.length === 0) break;
+    const idx = list.findIndex((r) => r.squadSnapshot === squad);
+    if (idx !== -1) {
+      picks.push(list.splice(idx, 1)[0]);
+    } else {
       picks.push(list.shift()!);
     }
-    return picks;
   }
 
-  for (let i = 0; i < list.length && picks.length < targetCount; i++) {
-    if (list[i].squadSnapshot === preferSquad) {
-      picks.push(list.splice(i, 1)[0]);
-      i--;
-    }
-  }
-  while (picks.length < targetCount && list.length > 0) {
-    picks.push(list.shift()!);
-  }
   return picks;
 }
 
@@ -306,17 +302,11 @@ export async function autoDistributeStrategy(eventId: string): Promise<number> {
   });
 
   const remaining = [...starters];
-  const siloPicks = extractTopPicks(remaining, 4, SquadType.TANK);
-  const arsenalPicks = extractTopPicks(remaining, 3, SquadType.MISSILE);
+  const assignmentsToMake: Array<{ id: string; building: string }> = [];
 
-  const assignmentsToMake: Array<{ id: string; building: string }> = [
-    ...siloPicks.map((r) => ({ id: r.id, building: "NUCLEAR_SILO" })),
-    ...arsenalPicks.map((r) => ({ id: r.id, building: "ARSENAL" })),
-  ];
-
-  for (const bId of OTHER_BUILDINGS) {
-    const cap = BUILDING_CAPACITIES[bId] || 1;
-    const picks = extractTopPicks(remaining, cap);
+  for (const bId of BUILDING_ORDER) {
+    const prefs = BUILDING_SQUAD_PREFERENCES[bId] || [];
+    const picks = extractMixedPicks(remaining, prefs);
     for (const r of picks) {
       assignmentsToMake.push({ id: r.id, building: bId });
     }

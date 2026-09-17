@@ -60,8 +60,18 @@ You can trigger an immediate battlefield announcement with an explicit `close-in
        - 🏆 Main Squad: Match start time `<t:startsAt:F>`, squad, reminder.
        - 🔄 Substitutes: Standby instructions.
        - 🔵 Standby: Reserve notice.
+     - The bot response contains a shortcut button: **`[ 🗺️ Plan Tactical Strategy ]`**!
 
-7. **Finalize Attendance & Verify Channel Recap + DMs**:
+7. **Plan Battlefield Tactical Strategy Map & Allocate Buildings**:
+   - Run `/admin strategy wizard event:Desert Storm team:Team A` (or click the button on the lineup wizard):
+     - **Structure Selector**: Switch between structures (Nuclear Silo, Arsenal, Mercenary Factory, Oil Refineries, Hospitals, Science Hub, Info Center).
+     - **Player Selector**: Multi-select players from the Main Squad to allocate to the selected structure.
+     - **`[ ⚡ Auto-Distribute ]`**: Automatically allocates the 20 starters across all 11 buildings based on tactical priorities (Top tanks to Nuclear Silo, missile squads to Arsenal, power distribution across refineries and hospitals).
+     - **`[ 🖼️ Preview Map ]`**: Generates and sends a private high-res preview PNG of the battlefield schematic with player names, squads, power, and the side list of Substitutes.
+     - **`[ 📢 Publish Strategy ]`** (or `/admin strategy publish`): Broadcasts the visual strategy map image and embed to the event channel, and sends target objective Direct Messages to each starter!
+   - You can also view the map at any time with `/admin strategy view event:Desert Storm team:Team A`.
+
+8. **Finalize Attendance & Verify Channel Recap + DMs**:
    - Run `/admin attendance wizard event:Desert Storm team:Team A`:
      - Mark any absent players (or leave all unchecked).
      - Click **`[ 🏁 Finalize Attendance ]`**.

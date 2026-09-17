@@ -1,4 +1,4 @@
-import { ParticipationRole } from "@prisma/client";
+import { EventType, ParticipationRole } from "@prisma/client";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -87,10 +87,11 @@ function buildActionButtonsRow(
   eventId: string,
   mode: ParticipationRole,
   safePage: number,
+  isDesertStorm = false,
 ): WizardComponentRow {
   const isMain = mode === ParticipationRole.MAIN;
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`lineup_wiz:mode:${eventId}:MAIN:${safePage}`)
       .setLabel("Edit Main")
@@ -106,12 +107,27 @@ function buildActionButtonsRow(
       .setLabel("Auto-Fill")
       .setEmoji("⚡")
       .setStyle(ButtonStyle.Primary),
+  );
+
+  if (isDesertStorm) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`strat_wiz:open:${eventId}`)
+        .setLabel("Strategy")
+        .setEmoji("🗺️")
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+
+  row.addComponents(
     new ButtonBuilder()
       .setCustomId(`lineup_wiz:publish:${eventId}`)
       .setLabel("Publish")
       .setEmoji("📢")
       .setStyle(ButtonStyle.Danger),
-  ) as WizardComponentRow;
+  );
+
+  return row as WizardComponentRow;
 }
 
 function buildNavRow(
@@ -233,7 +249,14 @@ export async function buildLineupWizardPayload(
   const selectRow = buildSelectMenuRow(pageItems, eventId, mode, safePage);
   if (selectRow) components.push(selectRow);
 
-  components.push(buildActionButtonsRow(eventId, mode, safePage));
+  components.push(
+    buildActionButtonsRow(
+      eventId,
+      mode,
+      safePage,
+      event.type === EventType.DESERT_STORM,
+    ),
+  );
 
   const navRow = buildNavRow(eventId, mode, safePage, totalPages);
   if (navRow) components.push(navRow);
@@ -288,6 +311,37 @@ export async function handleLineupWizardSelect(
   await interaction.update(payload);
 }
 
+async function resolvePublishChannel(
+  interaction: ButtonInteraction,
+  event: { guildId: string; type: EventType; channelId: string | null },
+) {
+  const cfg = await db.eventConfig.findUnique({
+    where: { guildId_eventType: { guildId: event.guildId, eventType: event.type } },
+  });
+  const channelId = event.channelId ?? cfg?.channelId ?? interaction.channelId;
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isSendable()) {
+    return { channel: null, channelId };
+  }
+  return { channel, channelId };
+}
+
+function buildLineupPublishComponents(
+  eventId: string,
+  isDesertStorm: boolean,
+): WizardComponentRow[] {
+  if (!isDesertStorm) return [];
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`strat_wiz:open:${eventId}`)
+        .setLabel("Plan Tactical Strategy")
+        .setEmoji("🗺️")
+        .setStyle(ButtonStyle.Success),
+    ) as WizardComponentRow,
+  ];
+}
+
 async function handlePublishAction(
   interaction: ButtonInteraction,
   eventId: string,
@@ -301,16 +355,8 @@ async function handlePublishAction(
     return;
   }
 
-  const cfg = await db.eventConfig.findUnique({
-    where: {
-      guildId_eventType: { guildId: event.guildId, eventType: event.type },
-    },
-  });
-
-  const channelId = event.channelId ?? cfg?.channelId ?? interaction.channelId;
-  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-
-  if (!channel || !channel.isSendable()) {
+  const { channel, channelId } = await resolvePublishChannel(interaction, event);
+  if (!channel) {
     await interaction.reply({
       content: `❌ Channel <#${channelId}> not sendable.`,
       flags: MessageFlags.Ephemeral,
@@ -327,8 +373,12 @@ async function handlePublishAction(
   try {
     await channel.send({ embeds: [embed] });
     notifyLineupPublished(interaction.client, event, registrations).catch(console.error);
+    const isDS = event.type === EventType.DESERT_STORM;
+    const replyComponents = buildLineupPublishComponents(eventId, isDS);
+
     await interaction.reply({
-      content: `✅ Lineup successfully published to <#${channelId}>! Notifications sent to players.`,
+      content: `✅ Lineup successfully published to <#${channelId}>! Notifications sent to players.${isDS ? "\n💡 **Next Step:** You can now plan and allocate players to battlefield structures." : ""}`,
+      components: replyComponents,
       flags: MessageFlags.Ephemeral,
     });
   } catch (error: any) {

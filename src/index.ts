@@ -19,6 +19,10 @@ import {
   handleAttendanceWizardButton,
   handleAttendanceWizardSelect,
 } from "./interactions/attendance-wizard.js";
+import {
+  handleStrategyWizardButton,
+  handleStrategyWizardSelect,
+} from "./interactions/strategy-wizard.js";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -54,6 +58,10 @@ async function onButton(i: ButtonInteraction): Promise<void> {
       await handleAttendanceWizardButton(i);
       return;
     }
+    if (i.customId.startsWith("strat_wiz:")) {
+      await handleStrategyWizardButton(i);
+      return;
+    }
     await handleButtonInteraction(i);
   } catch (err) {
     console.error(err);
@@ -69,6 +77,10 @@ async function onSelectMenu(i: StringSelectMenuInteraction): Promise<void> {
     }
     if (i.customId.startsWith("att_wiz:")) {
       await handleAttendanceWizardSelect(i);
+      return;
+    }
+    if (i.customId.startsWith("strat_wiz:")) {
+      await handleStrategyWizardSelect(i);
       return;
     }
   } catch (err) {

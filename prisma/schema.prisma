@@ -105,6 +105,7 @@ model Registration {
   squadSnapshot SquadType
   role          ParticipationRole @default(UNSELECTED)
   attendance    AttendanceStatus  @default(PENDING)
+  assignedBuilding String?
   registeredAt  DateTime          @default(now())
   event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player        Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)

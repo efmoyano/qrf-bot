@@ -26,6 +26,11 @@ import {
   handleAttendanceMark,
   handleAttendanceWizard,
 } from "./attendance-handlers.js";
+import {
+  handleStrategyPublish,
+  handleStrategyView,
+  handleStrategyWizard,
+} from "./strategy-handlers.js";
 import { playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
 import { Command } from "../types.js";
 
@@ -727,6 +732,15 @@ async function handleAttendanceGroup(
   if (sub === "finalize") return handleAttendanceFinalize(interaction);
 }
 
+async function handleStrategyGroup(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const sub = interaction.options.getSubcommand();
+  if (sub === "wizard") return handleStrategyWizard(interaction);
+  if (sub === "view") return handleStrategyView(interaction);
+  if (sub === "publish") return handleStrategyPublish(interaction);
+}
+
 async function handleRoleGroup(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
@@ -1193,6 +1207,88 @@ export const adminCommand: Command = {
     )
     .addSubcommandGroup((g) =>
       g
+        .setName("strategy")
+        .setDescription("Battlefield tactical strategy map & structure assignments")
+        .addSubcommand((s) =>
+          s
+            .setName("wizard")
+            .setDescription("Interactive strategy planner to assign players to battlefield structures")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("view")
+            .setDescription("Generate and view the visual tactical strategy map")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("publish")
+            .setDescription("Broadcast the tactical strategy map image to the event channel & notify players")
+            .addStringOption((o) =>
+              o
+                .setName("event")
+                .setDescription("Event type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Desert Storm", value: "DESERT_STORM" },
+                ),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("team")
+                .setDescription("Team")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Team A", value: "TEAM_A" },
+                  { name: "Team B", value: "TEAM_B" },
+                ),
+            )
+            .addChannelOption((o) =>
+              o
+                .setName("channel")
+                .setDescription("Destination channel (defaults to configured event channel)"),
+            ),
+        ),
+    )
+    .addSubcommandGroup((g) =>
+      g
         .setName("role")
         .setDescription("Alliance admin role management")
         .addSubcommand((s) =>
@@ -1260,6 +1356,10 @@ export const adminCommand: Command = {
     }
     if (group === "attendance") {
       await handleAttendanceGroup(interaction);
+      return;
+    }
+    if (group === "strategy") {
+      await handleStrategyGroup(interaction);
       return;
     }
   },

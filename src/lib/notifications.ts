@@ -171,3 +171,70 @@ export function buildAttendanceBroadcastEmbed(
     })
     .setTimestamp();
 }
+
+export async function notifyStrategyPublished(
+  client: Client,
+  event: Event,
+  registrations: RegistrationWithPlayer[],
+  buildingMap: Record<string, string>,
+): Promise<void> {
+  const eventTitle = `${eventLabel(event.type)} (${teamLabel(event.team)})`;
+  const matchTimestamp = Math.floor(event.startsAt.getTime() / 1000);
+
+  const notifications = registrations.map(async (r) => {
+    let title = "";
+    let description = "";
+    let color = 0x5865f2;
+
+    if (r.role === ParticipationRole.MAIN && r.assignedBuilding) {
+      const bName = buildingMap[r.assignedBuilding] ?? r.assignedBuilding;
+      title = `🗺️ Tactical Objective Assigned: ${eventTitle}`;
+      description = `Your tactical combat assignment for **${eventTitle}** is ready!\n\n🎯 **Assigned Structure:** **${bName}**\n⚔️ **Squad:** ${r.player.squadType}\n📅 **Match Starts:** <t:${matchTimestamp}:F> (<t:${matchTimestamp}:R>)\n\nPlease review the tactical battlefield map in the team channel and coordinate with your squad mates!`;
+      color = 0xf97316;
+    } else if (r.role === ParticipationRole.SUBSTITUTE) {
+      title = `🔄 Reserve Duty: ${eventTitle}`;
+      description = `The tactical strategy map for **${eventTitle}** has been published!\n\nYou are assigned as **Substitute / Reserve**. Please be online and prepared to step in for any structure defense if required.`;
+      color = 0xfee75c;
+    } else {
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(title)
+      .setDescription(description)
+      .setFooter({ text: "Desert Storm Tactical Command" })
+      .setTimestamp();
+
+    return sendDirectMessage(client, r.player.discordId, { embeds: [embed] });
+  });
+
+  await Promise.allSettled(notifications);
+}
+
+export function buildStrategyBroadcastEmbed(
+  event: Event,
+  starterCount: number,
+  subCount: number,
+): EmbedBuilder {
+  const eventTitle = `${eventLabel(event.type)} — ${teamLabel(event.team)}`;
+
+  return new EmbedBuilder()
+    .setColor(0xe67e22)
+    .setTitle(`🗺️ Battlefield Strategy Map: ${eventTitle}`)
+    .setDescription(
+      [
+        `The official **Tactical Strategy & Building Distribution Map** has been published for **${eventTitle}**!`,
+        "",
+        `📊 **Force Deployment:**`,
+        `• 🏆 **Main Squad Starters:** ${starterCount}/20 allocated to structures`,
+        `• 🔄 **Substitutes on Standby:** ${subCount}/10 reserve support`,
+        "",
+        `🔍 *Check the attached tactical battlefield schematic image below to see your assigned building objective and squad positions!*`,
+      ].join("\n"),
+    )
+    .setImage("attachment://desert_storm_strategy.png")
+    .setFooter({ text: "Desert Storm Tactical Command" })
+    .setTimestamp();
+}
+

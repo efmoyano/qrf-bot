@@ -15,7 +15,13 @@
     "lint:fix": "oxlint --fix",
     "typecheck": "tsc --noEmit",
     "commit": "git add . && cz",
-    "prepare": "husky"
+    "prepare": "husky",
+    "pm2:start": "npm run build && pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop ecosystem.config.cjs",
+    "pm2:restart": "npm run build && pm2 restart ecosystem.config.cjs",
+    "pm2:status": "pm2 status",
+    "pm2:logs": "pm2 logs desert-storm-bot",
+    "pm2:delete": "pm2 delete ecosystem.config.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
@@ -23,7 +29,8 @@
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.1",
     "node-cron": "^4.2.1",
-    "oxlint-tsgolint": "^7.0.2001"
+    "oxlint-tsgolint": "^7.0.2001",
+    "pm2": "^7.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

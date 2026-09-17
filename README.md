@@ -310,15 +310,32 @@ Deploy the slash command definitions to Discord:
 pnpm run register-commands
 ```
 
-### 5. Start the Bot
-```bash
-# Development (with hot-reloading)
-pnpm run dev
+### 5. Running the Bot
 
-# Production build & run
-pnpm run build
-pnpm start
+#### Development (Hot-Reloading)
+```bash
+pnpm run dev
 ```
+
+#### Production with PM2 (Auto-Restart on Crash)
+Run the bot as a managed background daemon that automatically recovers and restarts if it crashes:
+```bash
+# Compile and start with PM2
+pnpm run pm2:start
+
+# View status
+pnpm run pm2:status
+
+# View live logs
+pnpm run pm2:logs
+
+# Restart after code changes
+pnpm run pm2:restart
+
+# Stop process
+pnpm run pm2:stop
+```
+
 
 ---
 

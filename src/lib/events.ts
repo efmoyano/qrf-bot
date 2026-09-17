@@ -1,4 +1,20 @@
-import { EventType, Team } from "@prisma/client";
+import { EventType, Team, EventConfig } from "@prisma/client";
+import { CronExpressionParser } from "cron-parser";
+
+export function computeNextEventDate(config: EventConfig): Date {
+  if (config.startDate) return config.startDate;
+  if (config.cronExpression) {
+    try {
+      const interval = CronExpressionParser.parse(config.cronExpression, { tz: "UTC" });
+      return interval.next().toDate();
+    } catch {
+      // fallback to default weekend calculation
+    }
+  }
+  // Existing default: next Saturday announcement
+  return getCurrentCycleAnnouncement();
+}
+
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -72,9 +88,10 @@ export function getCurrentCycleAnnouncement(from: Date = new Date()): Date {
 export function getBattlefieldSchedule(
   type: EventType,
   announcedSaturday: Date,
+  registrationCloseHours = 48,
 ): BattlefieldSchedule {
   const t = announcedSaturday.getTime();
-  const registrationClosesAt = new Date(t + 48 * 60 * 60 * 1000);
+  const registrationClosesAt = new Date(t + registrationCloseHours * 60 * 60 * 1000);
 
   if (type === EventType.CANYON_STORM) {
     return {
@@ -110,13 +127,25 @@ export interface CreateBattlefieldCycleOptions {
   announcedSaturday: Date;
   channelId?: string | null;
   registrationClosesAt?: Date;
+  registrationCloseHours?: number;
 }
 
 export async function createBattlefieldCycle(
   options: CreateBattlefieldCycleOptions,
 ) {
-  const { guildId, type, announcedSaturday, channelId, registrationClosesAt } = options;
-  const baseSchedule = getBattlefieldSchedule(type, announcedSaturday);
+  const {
+    guildId,
+    type,
+    announcedSaturday,
+    channelId,
+    registrationClosesAt,
+    registrationCloseHours,
+  } = options;
+  const baseSchedule = getBattlefieldSchedule(
+    type,
+    announcedSaturday,
+    registrationCloseHours ?? 48,
+  );
   const effectiveClosesAt = registrationClosesAt ?? baseSchedule.registrationClosesAt;
   const schedule: BattlefieldSchedule = {
     ...baseSchedule,

@@ -50,7 +50,8 @@ async function handleButtonRegister(
 
   if (new Date() >= event.registrationClosesAt) {
     await interaction.reply({
-      content: "❌ Registration for this event has closed.",
+      content:
+        "🔒 Registration for this match cycle has closed. Rosters are currently being organized; you will be notified if you are selected for Main Squad or Substitutes!",
       flags: MessageFlags.Ephemeral,
     });
     return;

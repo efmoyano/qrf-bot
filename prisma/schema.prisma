@@ -67,11 +67,16 @@ model EventConfig {
   id               String    @id @default(cuid())
   guildId          String
   eventType        EventType
-  announcementCron String    @default("0 23 * * 6")
-  channelId        String?
+  announcementCron       String    @default("0 23 * * 6")
+  registrationCloseHours Int       @default(48)
+  channelId              String?
   enabled          Boolean   @default(true)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+
+  // New fields for custom scheduling
+  cronExpression      String?
+  startDate           DateTime?
 
   @@unique([guildId, eventType])
 }

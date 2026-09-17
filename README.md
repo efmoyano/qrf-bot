@@ -108,11 +108,12 @@ Here is a full real-world walkthrough of how an alliance uses the bot throughout
    ```
    /admin role add user:@Commander role:👑 Alliance Admin
    ```
-2. **Configure automated event channel and schedule**:
+2. **Configure automated event channel, schedule, and registration close duration**:
    ```
-   /admin event config event:Desert Storm channel:#desert-storm
-   /admin event config event:Canyon Storm channel:#canyon-storm
+   /admin event config event:Desert Storm channel:#desert-storm close-hours:48
+   /admin event config event:Canyon Storm channel:#canyon-storm close-hours:72
    ```
+   *(Registration close hours defaults to 48 hours if omitted).*
 
 ### Phase 2: Alliance Members Register Profiles
 Members register their profile once. Power inputs support shortcuts like `82.4M` or `80m`:
@@ -218,8 +219,8 @@ Fast, error-free post-match reconciliation.
 #### Event Management (`/admin event`)
 | Command | Description |
 | :--- | :--- |
-| `/admin event config <event> <channel> [cron]` | Set event announcement channel and custom cron schedule (default: `0 23 * * 6`). |
-| `/admin event announce <event> [close-in-minutes]` | Post the announcement embed with 1-click registration buttons immediately. |
+| `/admin event config <event> <channel> [cron] [close-hours]` | Set announcement channel, custom cron schedule (default: `0 23 * * 6`), and registration window (default: 48h). |
+| `/admin event announce <event> [close-hours] [close-in-minutes]` | Post the announcement embed immediately with optional custom close duration (hours or quick test minutes). |
 | `/admin event upcoming` | List all upcoming scheduled battlefield events and their statuses. |
 | `/admin event create <event> <team> <starts-at> <closes-at>` | Manually create a one-off event with custom dates. |
 

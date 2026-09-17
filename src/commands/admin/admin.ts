@@ -1,4 +1,4 @@
-import { EventType, PlayerTag, SquadType, Team } from "@prisma/client";
+import { EventType, PlayerTag, SquadType } from "@prisma/client";
 import {
   ChatInputCommandInteraction,
   EmbedBuilder,
@@ -12,6 +12,7 @@ import { eventLabel, teamLabel } from "../../lib/events.js";
 import { formatPower, parsePower } from "../../lib/format.js";
 import { requireAdmin, requireRoleManager } from "../../lib/permissions.js";
 import { postBattlefieldAnnouncement } from "../../lib/announcement.js";
+import cron from "node-cron";
 import { registerOrUpdateScheduler } from "../../lib/scheduler.js";
 import {
   handleLineupAuto,
@@ -70,11 +71,22 @@ async function handleEventConfig(
   const type = interaction.options.getString("event", true) as EventType;
   const channel = interaction.options.getChannel("channel", true);
   const announcementCron = interaction.options.getString("cron") ?? "0 23 * * 6";
+  const closeHours = interaction.options.getInteger("close-hours") ?? undefined;
 
-  await db.eventConfig.upsert({
+  const cfg = await db.eventConfig.upsert({
     where: { guildId_eventType: { guildId, eventType: type } },
-    update: { announcementCron, channelId: channel.id },
-    create: { guildId, eventType: type, announcementCron, channelId: channel.id },
+    update: {
+      announcementCron,
+      channelId: channel.id,
+      ...(closeHours !== undefined ? { registrationCloseHours: closeHours } : {}),
+    },
+    create: {
+      guildId,
+      eventType: type,
+      announcementCron,
+      channelId: channel.id,
+      registrationCloseHours: closeHours ?? 48,
+    },
   });
 
   registerOrUpdateScheduler(interaction.client, {
@@ -86,7 +98,7 @@ async function handleEventConfig(
   });
 
   await interaction.reply({
-    content: `✅ Automatic posting configured for **${eventLabel(type)}** in <#${channel.id}> (Cron: \`${announcementCron}\`).`,
+    content: `✅ Automatic posting configured for **${eventLabel(type)}** in <#${channel.id}> (Cron: \`${announcementCron}\`, Closes: **${cfg.registrationCloseHours}h** after announcement).`,
     flags: MessageFlags.Ephemeral,
   });
 }
@@ -98,6 +110,8 @@ async function handleEventAnnounce(
   const type = interaction.options.getString("event", true) as EventType;
   const closeInMinutes =
     interaction.options.getInteger("close-in-minutes") ?? undefined;
+  const closeInHours =
+    interaction.options.getInteger("close-hours") ?? undefined;
 
   const cfg = await db.eventConfig.findUnique({
     where: { guildId_eventType: { guildId, eventType: type } },
@@ -111,6 +125,7 @@ async function handleEventAnnounce(
     type,
     channelId,
     closeInMinutes,
+    closeInHours,
   });
 
   await interaction.reply({
@@ -151,51 +166,88 @@ async function handleEventUpcoming(
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
-async function handleEventCreate(
-  interaction: ChatInputCommandInteraction,
-): Promise<void> {
-  const guildId = interaction.guildId!;
-  const type = interaction.options.getString("event", true) as EventType;
-  const team = interaction.options.getString("team", true) as Team;
-  const startStr = interaction.options.getString("start", true);
-  const closeStr = interaction.options.getString("close", true);
-
-  const start = new Date(startStr);
-  const close = new Date(closeStr);
-
-  if (isNaN(start.getTime()) || isNaN(close.getTime()) || close >= start) {
-    await interaction.reply({
-      content: "❌ Invalid dates. Registration close must be before start time.",
-      flags: MessageFlags.Ephemeral,
+async function reapplyGuildSchedulers(client: any, guildId: string): Promise<void> {
+  const configs = await db.eventConfig.findMany({ where: { guildId, enabled: true } });
+  for (const cfg of configs) {
+    if (!cfg.cronExpression) continue;
+    registerOrUpdateScheduler(client, {
+      guildId,
+      eventType: cfg.eventType,
+      announcementCron: cfg.cronExpression,
+      channelId: cfg.channelId,
+      enabled: true,
     });
+  }
+}
+
+function scheduleOneOffAnnouncement(
+  client: any,
+  guildId: string,
+  fallbackChannelId: string,
+  startDate: Date,
+): void {
+  const delay = startDate.getTime() - Date.now();
+  if (delay <= 0) return;
+
+  setTimeout(async () => {
+    const cfg = await db.eventConfig.findFirst({ where: { guildId, enabled: true } });
+    if (!cfg) return;
+    await postBattlefieldAnnouncement({
+      client,
+      guildId,
+      type: cfg.eventType,
+      channelId: cfg.channelId ?? fallbackChannelId,
+    });
+  }, delay);
+}
+
+// Schedule handler for custom cron or one‑off date
+async function handleEventSchedule(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guildId = interaction.guildId!;
+  const cronExpr = interaction.options.getString("cron");
+  const dateStr = interaction.options.getString("date");
+
+  if (!cronExpr && !dateStr) {
+    await interaction.reply({ content: "You must provide either a cron expression or a date.", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const event = await db.event.create({
-    data: {
-      guildId,
-      type,
-      team,
-      startsAt: start,
-      registrationClosesAt: close,
-      channelId: interaction.channelId,
-    },
+  const updates: Record<string, unknown> = {};
+  if (cronExpr) {
+    if (!cron.validate(cronExpr)) {
+      await interaction.reply({ content: `Invalid cron expression: ${cronExpr}`, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    updates.cronExpression = cronExpr;
+    updates.startDate = null;
+  }
+  if (dateStr) {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      await interaction.reply({ content: "Invalid date format. Use ISO‑8601.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    updates.startDate = date;
+    updates.cronExpression = null;
+  }
+
+  await db.eventConfig.updateMany({
+    where: { guildId },
+    data: updates,
   });
 
-  await interaction.reply({
-    content: [
-      `✅ Created **${eventLabel(type)} - ${teamLabel(team)}**`,
-      `Start: <t:${Math.floor(start.getTime() / 1000)}:F>`,
-      `Closes: <t:${Math.floor(close.getTime() / 1000)}:F>`,
-      `ID: \`${event.id}\``,
-    ].join("\n"),
-    flags: MessageFlags.Ephemeral,
-  });
+  if (cronExpr) {
+    await reapplyGuildSchedulers(interaction.client, guildId);
+  }
+  if (dateStr && updates.startDate instanceof Date) {
+    scheduleOneOffAnnouncement(interaction.client, guildId, interaction.channelId, updates.startDate);
+  }
+
+  await interaction.reply({ content: "Event schedule updated successfully.", flags: MessageFlags.Ephemeral });
 }
 
-// ---------------------------------------------------------------------------
-// MEMBER GROUP HANDLERS
-// ---------------------------------------------------------------------------
+
+
 
 async function handleMemberList(
   interaction: ChatInputCommandInteraction,
@@ -639,7 +691,7 @@ async function handleEventGroup(
   if (sub === "config") return handleEventConfig(interaction);
   if (sub === "announce") return handleEventAnnounce(interaction);
   if (sub === "upcoming") return handleEventUpcoming(interaction);
-  if (sub === "create") return handleEventCreate(interaction);
+  if (sub === "schedule") return handleEventSchedule(interaction);
 }
 
 async function handleMemberGroup(
@@ -721,6 +773,14 @@ export const adminCommand: Command = {
                 .setName("cron")
                 .setDescription("Cron expression for weekly announcement (default: 0 23 * * 6)")
                 .setRequired(false),
+            )
+            .addIntegerOption((o) =>
+              o
+                .setName("close-hours")
+                .setDescription("Hours after announcement before registration closes (default: 48)")
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(168),
             ),
         )
         .addSubcommand((s) =>
@@ -739,10 +799,35 @@ export const adminCommand: Command = {
             )
             .addIntegerOption((o) =>
               o
+                .setName("close-hours")
+                .setDescription("Registration window in hours (overrides event config)")
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(168),
+            )
+            .addIntegerOption((o) =>
+              o
                 .setName("close-in-minutes")
                 .setDescription("Optional: minutes until registration closes (e.g. 1 to test)")
                 .setRequired(false)
                 .setMinValue(1),
+            ),
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("schedule")
+            .setDescription("Set custom cron or one‑off date for next event")
+            .addStringOption((o) =>
+              o
+                .setName("cron")
+                .setDescription("Cron expression (UTC)")
+                .setRequired(false),
+            )
+            .addStringOption((o) =>
+              o
+                .setName("date")
+                .setDescription("ISO‑8601 date for a one‑off event")
+                .setRequired(false),
             ),
         )
         .addSubcommand((s) =>

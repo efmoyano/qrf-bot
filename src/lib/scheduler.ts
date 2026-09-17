@@ -3,7 +3,10 @@ import { Client } from "discord.js";
 import { EventType } from "@prisma/client";
 import { db } from "./db.js";
 import { env } from "./config.js";
-import { postBattlefieldAnnouncement } from "./announcement.js";
+import {
+  postBattlefieldAnnouncement,
+  scheduleRegistrationCloseTimer,
+} from "./announcement.js";
 
 export interface EventSchedulerConfig {
   guildId: string;
@@ -66,9 +69,31 @@ export function registerOrUpdateScheduler(
   return true;
 }
 
+export async function recoverPendingRegistrationCloses(client: Client): Promise<void> {
+  const pendingEvents = await db.event.findMany({
+    where: {
+      registrationClosesAt: { gt: new Date() },
+      messageId: { not: null },
+      channelId: { not: null },
+    },
+  });
+
+  for (const e of pendingEvents) {
+    scheduleRegistrationCloseTimer({
+      client,
+      channelId: e.channelId!,
+      messageId: e.messageId!,
+      type: e.type,
+      closesAt: e.registrationClosesAt,
+    });
+  }
+}
+
 export async function initAllSchedulers(client: Client): Promise<void> {
   const configs = await db.eventConfig.findMany({ where: { enabled: true } });
   for (const cfg of configs) {
     registerOrUpdateScheduler(client, cfg);
   }
+  await recoverPendingRegistrationCloses(client);
 }
+

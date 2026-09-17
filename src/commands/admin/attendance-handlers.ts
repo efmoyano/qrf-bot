@@ -4,6 +4,10 @@ import { db } from "../../lib/db.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
 import { finalizeAttendance, playerTagIcon, playerTagLabel } from "../../lib/lineup.js";
 import { buildAttendanceWizardPayload } from "../../interactions/attendance-wizard.js";
+import {
+  buildAttendanceBroadcastEmbed,
+  notifyAttendanceFinalized,
+} from "../../lib/notifications.js";
 
 export async function handleAttendanceWizard(
   interaction: ChatInputCommandInteraction,
@@ -163,6 +167,20 @@ export async function handleAttendanceFinalize(
 
   const summary = await finalizeAttendance(event.id, noShowIds);
 
+  const updatedRegs = await db.registration.findMany({
+    where: { eventId: event.id },
+    include: { player: true },
+  });
+
+  const channelId = event.channelId ?? interaction.channelId;
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (channel && channel.isSendable()) {
+    const broadcastEmbed = buildAttendanceBroadcastEmbed(event, updatedRegs);
+    await channel.send({ embeds: [broadcastEmbed] }).catch(console.error);
+  }
+
+  notifyAttendanceFinalized(interaction.client, event, updatedRegs).catch(console.error);
+
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
     .setTitle(`🏁 Attendance Finalized: ${eventLabel(type)} — ${teamLabel(team)}`)
@@ -174,6 +192,8 @@ export async function handleAttendanceFinalize(
         `• ✅ **Attended:** ${summary.attendedCount} players (tags updated to White/kept Core)`,
         `• 🔴 **No-Shows:** ${summary.noShowCount} players (penalized with Red tag)`,
         `• 🔵 **Benched / Reserves:** ${summary.benchedCount} players (awarded Blue priority tag for next event!)`,
+        "",
+        `📢 *Public recap broadcast to <#${channelId}> and individual DMs dispatched to players.*`,
       ].join("\n"),
     )
     .setFooter({ text: "Player priority tags updated in database" })

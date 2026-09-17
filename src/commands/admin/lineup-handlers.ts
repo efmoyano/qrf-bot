@@ -4,6 +4,7 @@ import { db } from "../../lib/db.js";
 import { eventLabel, teamLabel } from "../../lib/events.js";
 import { autoSelectLineup, buildLineupEmbed, setPlayerRole } from "../../lib/lineup.js";
 import { buildLineupWizardPayload } from "../../interactions/lineup-wizard.js";
+import { notifyLineupPublished } from "../../lib/notifications.js";
 
 export async function handleLineupWizard(
   interaction: ChatInputCommandInteraction,
@@ -212,10 +213,19 @@ export async function handleLineupPublish(
   });
 
   const embed = buildLineupEmbed(event, registrations);
-  await channel.send({ embeds: [embed] });
-
-  await interaction.reply({
-    content: `✅ Lineup published to <#${channelId}>!`,
-    flags: MessageFlags.Ephemeral,
-  });
+  try {
+    await channel.send({ embeds: [embed] });
+    notifyLineupPublished(interaction.client, event, registrations).catch(console.error);
+    await interaction.reply({
+      content: `✅ Lineup published to <#${channelId}>! Notifications sent to players.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error: any) {
+    console.error("[LineupPublish] Failed to send lineup embed:", error);
+    await interaction.reply({
+      content: `❌ Failed to publish lineup to <#${channelId}>: ${error?.message || "Missing Permissions"}. Please verify the bot has **Send Messages** and **Embed Links** permissions in that channel.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 }
+

@@ -33,11 +33,15 @@ type AppInteraction =
   | StringSelectMenuInteraction;
 
 async function replyError(i: AppInteraction): Promise<void> {
-  if (i.replied || i.deferred) {
-    await i.followUp({ content: "Unexpected error.", flags: MessageFlags.Ephemeral });
-    return;
+  try {
+    if (i.replied || i.deferred) {
+      await i.followUp({ content: "Unexpected error.", flags: MessageFlags.Ephemeral }).catch(() => undefined);
+      return;
+    }
+    await i.reply({ content: "Unexpected error.", flags: MessageFlags.Ephemeral }).catch(() => undefined);
+  } catch {
+    // Ignore expired or already handled interactions
   }
-  await i.reply({ content: "Unexpected error.", flags: MessageFlags.Ephemeral });
 }
 
 async function onButton(i: ButtonInteraction): Promise<void> {

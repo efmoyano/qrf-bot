@@ -18,6 +18,10 @@ import {
   playerTagIcon,
   playerTagLabel,
 } from "../lib/lineup.js";
+import {
+  buildAttendanceBroadcastEmbed,
+  notifyAttendanceFinalized,
+} from "../lib/notifications.js";
 
 export interface AttendanceWizardPayload {
   content?: string;
@@ -196,6 +200,20 @@ export async function handleAttendanceWizardButton(
     const noShowPlayerIds = noShowRegs.map((r) => r.playerId);
     const summary = await finalizeAttendance(eventId, noShowPlayerIds);
 
+    const updatedRegs = await db.registration.findMany({
+      where: { eventId },
+      include: { player: true },
+    });
+
+    const channelId = event.channelId ?? interaction.channelId;
+    const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+    if (channel && channel.isSendable()) {
+      const broadcastEmbed = buildAttendanceBroadcastEmbed(event, updatedRegs);
+      await channel.send({ embeds: [broadcastEmbed] }).catch(console.error);
+    }
+
+    notifyAttendanceFinalized(interaction.client, event, updatedRegs).catch(console.error);
+
     const embed = new EmbedBuilder()
       .setColor(0x57f287)
       .setTitle(`🏁 Attendance Finalized: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
@@ -207,6 +225,8 @@ export async function handleAttendanceWizardButton(
           `• ✅ **Attended:** ${summary.attendedCount} players (tags kept/reset to White)`,
           `• 🔴 **No-Shows:** ${summary.noShowCount} players (penalized with Red tag)`,
           `• 🔵 **Benched / Reserves:** ${summary.benchedCount} players (awarded Blue priority tag for next event!)`,
+          "",
+          `📢 *Public recap broadcast to <#${channelId}> and individual DMs dispatched to players.*`,
         ].join("\n"),
       )
       .setFooter({ text: "Last War Battlefield Attendance" })

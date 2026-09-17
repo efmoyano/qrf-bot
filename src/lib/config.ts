@@ -3,7 +3,7 @@ import "dotenv/config";
 export const env = {
   token: process.env.DISCORD_TOKEN!,
   clientId: process.env.DISCORD_CLIENT_ID!,
-  timezone: process.env.TIMEZONE ?? "America/Argentina/Tucuman",
+  timezone: process.env.TIMEZONE ?? "UTC",
   adminRole: process.env.ADMIN_ROLE_NAME ?? "Desert Storm Admin",
 };
 

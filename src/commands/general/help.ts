@@ -42,8 +42,8 @@ export const helpCommand: Command = {
         {
           name: "📢 Event Setup & Broadcast (`/admin event`)",
           value: [
-            "`/admin event config` — Set automated announcement cron and channel",
-            "`/admin event announce` — Immediately post announcement embed with 1-click buttons",
+            "`/admin event config` — Set automated announcement cron, channel, and registration close duration",
+            "`/admin event announce` — Immediately post announcement embed (supports custom close-hours)",
             "`/admin event upcoming` — List upcoming scheduled battlefield events",
             "`/admin event create` — Manually create an event with custom start/close times",
           ].join("\n"),

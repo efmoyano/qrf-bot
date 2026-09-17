@@ -22,6 +22,7 @@ import {
   playerTagIcon,
   playerTagLabel,
 } from "../lib/lineup.js";
+import { notifyLineupPublished } from "../lib/notifications.js";
 
 const PAGE_SIZE = 25;
 
@@ -60,8 +61,8 @@ function buildSelectMenuRow(
     .setCustomId(`lineup_wiz:select:${eventId}:${mode}:${safePage}`)
     .setPlaceholder(
       isMain
-        ? "Check/uncheck players for Main Squad"
-        : "Check/uncheck players for Substitutes",
+        ? "Select players for Main Squad (Subs excluded)"
+        : "Select players for Substitutes (Main excluded)",
     )
     .setMinValues(0)
     .setMaxValues(Math.max(1, maxVals));
@@ -135,6 +136,56 @@ function buildNavRow(
   ) as WizardComponentRow;
 }
 
+interface WizardEmbedStats {
+  mainsCount: number;
+  subsCount: number;
+  standbyCount: number;
+  totalRegistered: number;
+  selectableCount: number;
+}
+
+function buildLineupWizardEmbed(
+  event: { type: any; team: any },
+  mode: ParticipationRole,
+  stats: WizardEmbedStats,
+): EmbedBuilder {
+  const isMain = mode === ParticipationRole.MAIN;
+  const otherRoleLabel = isMain ? "Substitutes" : "Main Squad";
+  const targetRoleLabel = isMain ? "Main Squad" : "Substitutes";
+
+  const modeTitle = isMain
+    ? `🏆 Editing Main Squad (Current: ${stats.mainsCount}/${MAX_MAIN_PLAYERS})`
+    : `🔄 Editing Substitutes (Current: ${stats.subsCount}/${MAX_SUBSTITUTE_PLAYERS})`;
+
+  const descriptionLines = [
+    `### ${modeTitle}`,
+    `Use the menu below to select players for **${targetRoleLabel}**.`,
+    `🔒 *Players in **${otherRoleLabel}** are excluded from this list to prevent duplicate selection.*`,
+    "",
+    `📊 **Roster Breakdown:**`,
+    `• 🏆 **Main Squad:** ${stats.mainsCount}/${MAX_MAIN_PLAYERS}`,
+    `• 🔄 **Substitutes:** ${stats.subsCount}/${MAX_SUBSTITUTE_PLAYERS}`,
+    `• 🔵 **Standby (Available to assign):** ${stats.standbyCount}`,
+    `• 👥 **Total Registered:** ${stats.totalRegistered}`,
+  ];
+
+  if (stats.selectableCount === 0) {
+    descriptionLines.push(
+      "",
+      `⚠️ *All registered players are currently assigned to ${otherRoleLabel}. Uncheck players there first to free them up.*`,
+    );
+  }
+
+  return new EmbedBuilder()
+    .setColor(isMain ? 0x57f287 : 0x5865f2)
+    .setTitle(`🧙‍♂️ Lineup Wizard: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
+    .setDescription(descriptionLines.join("\n"))
+    .setFooter({
+      text: "Tip: Click Auto-Fill to populate by priority tags & power with 1 click!",
+    })
+    .setTimestamp();
+}
+
 export async function buildLineupWizardPayload(
   eventId: string,
   mode: ParticipationRole,
@@ -158,33 +209,25 @@ export async function buildLineupWizardPayload(
   const subs = sorted.filter((r) => r.role === ParticipationRole.SUBSTITUTE);
   const standby = sorted.filter((r) => r.role === ParticipationRole.UNSELECTED);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const otherMode =
+    mode === ParticipationRole.MAIN
+      ? ParticipationRole.SUBSTITUTE
+      : ParticipationRole.MAIN;
+
+  // Filter out players already assigned to the other role so they cannot be selected here
+  const selectable = sorted.filter((r) => r.role !== otherMode);
+
+  const totalPages = Math.max(1, Math.ceil(selectable.length / PAGE_SIZE));
   const safePage = Math.max(0, Math.min(page, totalPages - 1));
-  const pageItems = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const pageItems = selectable.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-  const isMain = mode === ParticipationRole.MAIN;
-  const modeTitle = isMain
-    ? `🏆 Editing Main Squad (Current: ${mains.length}/${MAX_MAIN_PLAYERS})`
-    : `🔄 Editing Substitutes (Current: ${subs.length}/${MAX_SUBSTITUTE_PLAYERS})`;
-
-  const embed = new EmbedBuilder()
-    .setColor(isMain ? 0x57f287 : 0x5865f2)
-    .setTitle(`🧙‍♂️ Lineup Wizard: ${eventLabel(event.type)} — ${teamLabel(event.team)}`)
-    .setDescription(
-      [
-        `### ${modeTitle}`,
-        `Use the multi-select menu below to check/uncheck players. Checked players are assigned to **${isMain ? "Main Squad" : "Substitutes"}**.`,
-        "",
-        `📊 **Total Registrations:** ${sorted.length} | Page ${safePage + 1}/${totalPages}`,
-        `• 🏆 **Main Squad:** ${mains.length}/${MAX_MAIN_PLAYERS}`,
-        `• 🔄 **Substitutes:** ${subs.length}/${MAX_SUBSTITUTE_PLAYERS}`,
-        `• 🔵 **Standby (Next Priority):** ${standby.length}`,
-      ].join("\n"),
-    )
-    .setFooter({
-      text: "Tip: Click Auto-Fill to populate by priority tags & power with 1 click!",
-    })
-    .setTimestamp();
+  const embed = buildLineupWizardEmbed(event, mode, {
+    mainsCount: mains.length,
+    subsCount: subs.length,
+    standbyCount: standby.length,
+    totalRegistered: sorted.length,
+    selectableCount: selectable.length,
+  });
 
   const components: WizardComponentRow[] = [];
   const selectRow = buildSelectMenuRow(pageItems, eventId, mode, safePage);
@@ -212,7 +255,11 @@ export async function handleLineupWizardSelect(
   });
 
   const sorted = [...registrations].sort(compareRegistrations);
-  const pageItems = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const isMain = mode === ParticipationRole.MAIN;
+  const otherMode = isMain ? ParticipationRole.SUBSTITUTE : ParticipationRole.MAIN;
+  const selectable = sorted.filter((r) => r.role !== otherMode);
+
+  const pageItems = selectable.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const updates: Array<Promise<unknown>> = [];
 
@@ -277,12 +324,20 @@ async function handlePublishAction(
   });
 
   const embed = buildLineupEmbed(event, registrations);
-  await channel.send({ embeds: [embed] });
-
-  await interaction.reply({
-    content: `✅ Lineup successfully published to <#${channelId}>!`,
-    flags: MessageFlags.Ephemeral,
-  });
+  try {
+    await channel.send({ embeds: [embed] });
+    notifyLineupPublished(interaction.client, event, registrations).catch(console.error);
+    await interaction.reply({
+      content: `✅ Lineup successfully published to <#${channelId}>! Notifications sent to players.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error: any) {
+    console.error("[LineupWizard] Failed to publish lineup:", error);
+    await interaction.reply({
+      content: `❌ Failed to publish lineup to <#${channelId}>: ${error?.message || "Missing Permissions"}. Please verify the bot has **Send Messages** and **Embed Links** permissions in that channel.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 }
 
 export async function handleLineupWizardButton(

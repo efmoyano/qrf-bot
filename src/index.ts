@@ -109,3 +109,16 @@ client.on(Events.InteractionCreate, async (i) => {
 });
 
 client.login(env.token);
+
+const port = process.env.PORT;
+if (port) {
+  import("node:http").then(({ createServer }) => {
+    createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Last War Bot is running!\n");
+    }).listen(port, () => {
+      console.log(`HTTP health check server listening on port ${port}`);
+    });
+  });
+}
+
